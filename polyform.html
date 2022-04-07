@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyForm</title>
+    <style> 
+    </style>
+    <link rel="stylesheet" media="screen" href="defstylsh.css">
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+  </head>
+  <body>
+      <div class="nav">
+      <a href="index.html">Home</a>
+      <a href="cards.html">Guessing Game</a>
+      <a href="GUI-tar.html">GUI-tar</a>
+      <a href="polyform.html" class="active">PolyForm</a>
+      </div>
+      <br>
+      <section class="title-container">
+            <h1 id="title">PolyForm</h1>
+            <p class="sub-title">Work in Progress!</p>
+      </section>
+    <main>
+      <div id='d3cont'></div>
+    </main>
+
+  </body>
+
+  <script>
+
+    let screen_width  = screen.width;
+    let width = Math.floor(screen_width/2.8);
+    let height = Math.floor(screen_width/2.8);
+    let last_click = null;
+    let colors = ['black', 'white', 'pink', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple'];
+    let shapes = [];
+    let points = [];
+    let point_elems = [];
+    let selected = [];
+
+    let svg = d3.select("#d3cont")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                //center svg on page
+                .attr("transform", function(d, i) {
+                            return "translate(".concat(Math.floor(screen_width/2-width/2), ",0)");
+                            });
+
+
+    let border_n_grid = svg.append("g")
+    let main_node = svg.append("g")
+    
+    let grid_tile_size = 50;
+    let g_rows = Math.floor(width/grid_tile_size);
+    let g_cols = Math.floor(height/grid_tile_size);
+
+    if (width%grid_tile_size != 0) g_rows++;
+    if (g_cols%grid_tile_size != 0) g_cols++;
+
+
+    for(let r = 0; r < g_rows; r++)
+    {
+      for(let c = 0; c < g_cols; c++)
+      {
+        if(r%2 ==0)
+        {
+          if(c%2 == 0)
+          {
+            border_n_grid.append("rect")
+                         .attr("x",r*grid_tile_size)                        
+                         .attr("y",c*grid_tile_size)
+                         .attr("width",grid_tile_size)
+                         .attr("height",grid_tile_size)
+                         .attr("fill", "gainsboro");
+          }
+          else
+          {
+            border_n_grid.append("rect")
+                         .attr("x",r*grid_tile_size)                        
+                         .attr("y",c*grid_tile_size)
+                         .attr("width",grid_tile_size)
+                         .attr("height",grid_tile_size)
+                         .attr("fill", "white");
+          }
+        }
+        else
+        {
+          if(c%2 == 1)
+          {
+            border_n_grid.append("rect")
+                         .attr("x",r*grid_tile_size)                        
+                         .attr("y",c*grid_tile_size)
+                         .attr("width",grid_tile_size)
+                         .attr("height",grid_tile_size)
+                         .attr("fill", "gainsboro");
+          }
+          else
+          {
+            border_n_grid.append("rect")
+                         .attr("x",r*grid_tile_size)                        
+                         .attr("y",c*grid_tile_size)
+                         .attr("width",grid_tile_size)
+                         .attr("height",grid_tile_size)
+                         .attr("fill", "white");
+          }
+        }
+      }
+    }
+
+    border_n_grid.append("rect")
+                 .attr("width", width)
+                 .attr("height", height)
+                 .attr("fill", "none")
+                 .attr("stroke", "black")
+                 .attr("stroke-width", 4);
+
+    svg.on("click", function(){
+      last_click = d3.mouse(this);
+      point_elems.push(main_node.append("circle")
+                                .attr("cx", last_click[0])
+                                .attr("cy", last_click[1])
+                                .attr("r", 2)
+                                .attr("fill", colors[0]));
+      points.push(last_click);
+      });
+
+    svg.on("contextmenu", function(){
+              d3.event.preventDefault();
+        });
+
+    d3.select(window).on('keypress', function(){
+      let k = d3.event.key;
+      //top row of letter keys correspond to the 10 colors we can choose from to fill a polygon
+      if(k == 'q' || k == 'w' || k == 'e' || k == 'r' || k == 't' || k == 'y' || k == 'u' || k == 'i' || k == 'o' || k == 'p')
+      {
+        let color;
+
+        switch(k){
+          case "q":
+            color = colors[0];
+            break;
+          case "w":
+            color = colors[1];
+            break;
+          case "e":
+            color = colors[2];
+            break;
+          case "r":
+            color = colors[3];
+            break;
+          case "t":
+            color = colors[4];
+            break;
+          case "y":
+            color = colors[5];
+            break;
+          case "u":
+            color = colors[6];
+            break;
+          case "i":
+            color = colors[7];
+            break;
+          case "o":
+            color = colors[8];
+            break;
+          case "p":
+            color = colors[9];
+            break;
+
+        }
+
+        if(points.length > 2)
+        {
+          let pointsStr = "";
+          pointsStr = pointsStr.concat(points[0][0],",",points[0][1]);
+
+          for(let i = 1; i < points.length; i++)
+          {
+            pointsStr = pointsStr.concat(" ",points[i][0],",",points[i][1]);
+          }
+          
+          shapes.push(main_node.append("polygon")
+                               .attr("points", pointsStr)
+                               .attr("fill", color)
+                               .on("contextmenu", function()
+                               {
+
+                                let index = selected.indexOf(this);
+                                if(index == -1)
+                                {
+                                  selected.push(this);
+                                  d3.select(this).attr('stroke-width', 4)
+                                                 .attr('stroke', "gold");
+                                }
+                                else
+                                {
+                                  selected.splice(index,1);
+                                  d3.select(this).attr('stroke-width', 0);
+                                }
+                                
+                               }
+                               ));
+          point_elems.forEach(point => point.remove());
+          points = [];
+          point_elems = [];
+        }
+      }  
+    });
+
+
+
+  </script>
+
+</html>
