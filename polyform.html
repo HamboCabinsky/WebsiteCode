@@ -210,7 +210,52 @@
       }  
     });
 
+    document.onkeydown = checkKey;
 
+    function checkKey(e)
+    {
+      //console.log(e.keyCode);
+      if(e.keyCode >= 37 && e.keyCode <= 40)
+      {
+        e.preventDefault();
+        let toTranslate;
+        let tx;
+        let ty;
+
+        switch(e.keyCode)
+        {
+          case 37:
+            toTranslate = [-4,0];
+            break;
+          case 38:
+            toTranslate = [0,-4];
+            break;
+          case 39:
+            toTranslate = [4,0];
+            break;
+          case 40:
+            toTranslate = [0,4];
+            break;
+        }
+        
+        for(let i = 0; i < selected.length; i++)
+        {
+          //transform property as string
+          let t = d3.select(selected[i]).attr("transform");
+          let final_toT = [toTranslate[0],toTranslate[1]];
+          if(t)
+          {
+            tx = parseInt(t.substring(t.indexOf('(')+1,t.indexOf(',')));
+            ty = parseInt(t.substring(t.indexOf(',')+1,t.indexOf(')')));
+            final_toT[0] += tx;
+            final_toT[1] += ty;
+          }
+          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
+        }
+      }
+
+      
+    }
 
   </script>
 
