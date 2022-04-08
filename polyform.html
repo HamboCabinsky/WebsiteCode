@@ -8,7 +8,8 @@
     <style> 
     </style>
     <link rel="stylesheet" media="screen" href="defstylsh.css">
-    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <link rel="shortcut icon" type="image/jpg" href="painty.jpg">
+    <script src="https://d3js.org/d3.v4.min.js"></script>
   </head>
   <body>
       <div class="nav">
@@ -22,13 +23,14 @@
             <h1 id="title">PolyForm</h1>
             <p class="sub-title">Work in Progress!</p>
       </section>
+      <br>
     <main>
       <div id='d3cont'></div>
     </main>
 
   </body>
 
-  <script>
+<script>
 
     let screen_width  = screen.width;
     let width = Math.floor(screen_width/2.8);
@@ -50,8 +52,9 @@
                             });
 
 
-    let border_n_grid = svg.append("g")
-    let main_node = svg.append("g")
+    let border_n_grid = svg.append("g");
+    let main_node = svg.append("g");
+    main_node.attr("id","main_node");
     
     let grid_tile_size = 50;
     let g_rows = Math.floor(width/grid_tile_size);
@@ -212,9 +215,31 @@
 
     document.onkeydown = checkKey;
 
+    function cloneElem(elem)
+    {
+      shapes.push(d3.select(elem).clone([true]));
+      shapes[shapes.length-1].attr('stroke-width', 0)
+                             .on("contextmenu", function()
+                                   {
+                                    let index = selected.indexOf(this);
+                                    if(index == -1)
+                                    {
+                                      selected.push(this);
+                                      d3.select(this).attr('stroke-width', 4)
+                                                     .attr('stroke', "gold");
+                                    }
+                                    else
+                                    {
+                                      selected.splice(index,1);
+                                      d3.select(this).attr('stroke-width', 0);
+                                    }
+                                   });
+  };
+
     function checkKey(e)
     {
       //console.log(e.keyCode);
+      //arrow keys
       if(e.keyCode >= 37 && e.keyCode <= 40)
       {
         e.preventDefault();
@@ -253,9 +278,12 @@
           d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
         }
       }
-
-      
-    }
+      //if enter key is pressed
+      else if(e.keyCode == 13)
+      {
+        selected.forEach(elem => cloneElem(elem));
+      }
+    };
 
   </script>
 
