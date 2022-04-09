@@ -47,9 +47,7 @@
                 .attr("width", width)
                 .attr("height", height)
                 //center svg on page
-                .attr("transform", function(d, i) {
-                            return "translate(".concat(Math.floor(screen_width/2-width/2), ",0)");
-                            });
+                .attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
 
 
     let border_n_grid = svg.append("g");
@@ -236,54 +234,223 @@
                                    });
   };
 
-    function checkKey(e)
+  //remove a selected element
+  function removeElem(elem)
+  {
+    d3.select(elem).remove();
+    for(let i = 0; i < shapes.length; i++)
     {
-      //console.log(e.keyCode);
-      //arrow keys
-      if(e.keyCode >= 37 && e.keyCode <= 40)
-      {
-        e.preventDefault();
-        let toTranslate;
-        let tx;
-        let ty;
+      if(elem == shapes[i]._groups[0][0]) return shapes.splice(i,1);
+    }
+    return null;
+  }
 
-        switch(e.keyCode)
+  //get translation x & y from a d3 selection element
+  function getTranslation(elem)
+  {
+    let translate = [0,0];
+    let transform_str = elem.attr("transform");
+
+    //return [0,0] if we havent yet done any transformation on selected shape
+    if(transform_str == null) return translate;
+
+    let translateStrInd = transform_str.indexOf("translate");
+
+    //if we haven't translated element return [0,0]
+    if(translateStrInd == -1) return translate;
+
+    //otherwise parse transform string for translation x and y values
+    let tslStrStart = transform_str.indexOf("(", translateStrInd)+1;
+    let tslStrY = transform_str.indexOf(",", tslStrStart)+1;
+    let tslStrEnd = transform_str.indexOf(")", tslStrY);
+    translate[0] = parseInt(transform_str.substring(tslStrStart,tslStrY-1));
+    translate[1] = parseInt(transform_str.substring(tslStrY,tslStrEnd));
+
+    return translate;
+  }
+
+  //get rotation of a d3 selection element
+  function getRotation(elem)
+  {
+    let rotation = [0,0,0];
+    let transform_str = elem.attr("transform");
+    let num_elems;
+
+    //return [0,0] if we havent yet done any transformation on selected shape
+    if(transform_str == null) return rotation;
+
+    let rotationStrInd = transform_str.indexOf("rotate");
+
+    //if we haven't rotated element return [0,0,0]
+    if(rotationStrInd == -1) return rotation;
+
+    //otherwise parse transform string for translation x and y values
+    let rotStrStart = transform_str.indexOf("(", rotationStrInd)+1;
+    let rotStrX = transform_str.indexOf(",", rotStrStart)+1;
+    let rotStrEnd = transform_str.indexOf(")", rotStrStart);
+
+    if(rotStrX == -1 || rotStrX > rotStrEnd) num_elems = 1;
+    else num_elems = 3;
+
+    if(num_elems == 1)
+    {
+      rotation[0] = parseInt(transform_str.substring(rotStrStart,rotStrEnd));
+    }
+    else
+    {
+      //degrees
+      rotation[0] = parseInt(transform_str.substring(rotStrStart,rotStrX-1));
+      let rotStrY = transform_str.indexOf(",", rotStrX)+1;
+      //x,y value to rotate around
+      rotation[1] = parseInt(transform_str.substring(rotStrX,rotStrY-1));
+      rotation[2] = parseInt(transform_str.substring(rotStrY,rotStrEnd));
+    }
+
+    return rotation;
+  }
+
+  //rotate everything in selected around midpoint of selected objects
+  function rotateSelected(degrees)
+  {
+
+    if (selected.length == 0) return false;
+
+    let xSum = 0;
+    let ySum = 0;
+    let num_values = 0;
+    let sel_elem = null;
+    let pt_list = null;
+
+    for(let i = 0; i < selected.length; i++)
+    {
+      sel_elem = d3.select(selected[i]);
+      pt_list = sel_elem._groups[0][0].points;
+
+      for(let j = 0; j < pt_list.length; j++)
+      {
+        xSum += sel_elem._groups[0][0].points[j].x;
+        ySum += sel_elem._groups[0][0].points[j].y;
+        num_values++;
+      }
+
+      let origin = [Math.floor(xSum/num_values), Math.floor(ySum/num_values)];
+
+      xSum = 0;
+      ySum = 0;
+      num_values = 0;
+
+      let transform_str = d3.select(selected[i]).attr("transform");
+      let rotation = getRotation(d3.select(selected[i]));
+
+      //if we havent done any transformations yet, no other pieces of string to worry about
+      if(transform_str == null) 
+      {
+        d3.select(selected[i]).attr("transform", "rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")"));
+        continue;
+      }
+      
+
+      let rotateInd = transform_str.indexOf("rotate");
+
+      //if we've already rotated, need to insert translation into proper place in string
+      if(rotateInd != -1 || (origin[0] == rotation[1] && origin[1] == rotation[2]))
+      {
+        let rotateEnd = transform_str.indexOf(")", rotateInd);
+        let newTFb4 = transform_str.slice(0, rotateInd);
+        let newTFAfter = transform_str.slice(rotateEnd+1, transform_str.length);
+        let TFInsert ="rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")");
+        d3.select(selected[i]).attr("transform", newTFb4 + newTFAfter + TFInsert);
+      }
+      else
+      {
+        d3.select(selected[i]).attr("transform", transform_str.concat(" rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")")));
+      }
+    }
+
+    return true;
+  }
+
+  function checkKey(e)
+  {
+    //console.log(e.keyCode);
+    //arrow keys, translate selected
+    if(e.keyCode >= 37 && e.keyCode <= 40)
+    {
+      e.preventDefault();
+      let toTranslate;
+
+      switch(e.keyCode)
+      {
+        case 37:
+          toTranslate = [-4,0];
+          break;
+        case 38:
+          toTranslate = [0,-4];
+          break;
+        case 39:
+          toTranslate = [4,0];
+          break;
+        case 40:
+          toTranslate = [0,4];
+          break;
+      }
+      
+      for(let i = 0; i < selected.length; i++)
+      {
+        //transform property as string
+        let t = getTranslation(d3.select(selected[i]));
+        let final_toT = [toTranslate[0],toTranslate[1]];
+        if(t)
         {
-          case 37:
-            toTranslate = [-4,0];
-            break;
-          case 38:
-            toTranslate = [0,-4];
-            break;
-          case 39:
-            toTranslate = [4,0];
-            break;
-          case 40:
-            toTranslate = [0,4];
-            break;
+          final_toT[0] += t[0];
+          final_toT[1] += t[1];
+        }
+
+        let transform_str = d3.select(selected[i]).attr("transform");
+
+        //if we havent done any transformations yet, no other pieces of string to worry about
+        if(transform_str == null) 
+        {
+          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
+          continue;
+        }
+
+        let translateInd = transform_str.indexOf("translate");
+
+        //if we've already translated, need to insert translation into proper place in string
+        if(translateInd != -1)
+        {
+          let translateEnd = transform_str.indexOf(")", translateInd);
+          let newTFb4 = transform_str.slice(0, translateInd);
+          let newTFAfter = transform_str.slice(translateEnd+1, transform_str.length);
+          let TFInsert = "translate(".concat(final_toT[0],",",final_toT[1],")");
+          d3.select(selected[i]).attr("transform", newTFb4 + TFInsert + newTFAfter);
+        }
+        else
+        {
+          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],") ").concat(transform_str));
         }
         
-        for(let i = 0; i < selected.length; i++)
-        {
-          //transform property as string
-          let t = d3.select(selected[i]).attr("transform");
-          let final_toT = [toTranslate[0],toTranslate[1]];
-          if(t)
-          {
-            tx = parseInt(t.substring(t.indexOf('(')+1,t.indexOf(',')));
-            ty = parseInt(t.substring(t.indexOf(',')+1,t.indexOf(')')));
-            final_toT[0] += tx;
-            final_toT[1] += ty;
-          }
-          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
-        }
       }
-      //if enter key is pressed
-      else if(e.keyCode == 13)
-      {
-        selected.forEach(elem => cloneElem(elem));
-      }
-    };
+    }
+    //if enter key is pressed, duplicate selected
+    else if(e.keyCode == 13)
+    {
+      selected.forEach(elem => cloneElem(elem));
+    }
+    //if backspace pressed, delete selected
+    else if (e.keyCode == 8)
+    {
+      selected.forEach(elem => removeElem(elem));
+      selected = [];
+    }
+    //if < or > pressed, rotate selected
+    else if(e.keyCode == 188 || e.keyCode == 190)
+    {
+      if(e.keyCode == 188) rotateSelected(-2);
+      else rotateSelected(2);
+    }
+  };
 
   </script>
 
