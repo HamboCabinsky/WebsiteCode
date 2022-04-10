@@ -22,16 +22,18 @@
       <section class="title-container">
             <h1 id="title">PolyForm</h1>
             <p class="sub-title">Work in Progress!</p>
+            <p class="sub-title">UPDATE: changed polygon creation keys from letter keys to number keys (0-9)</p>
+            <a href="https://www.twitch.tv/hammybonanza">Check out the development process live on twitch</a>
       </section>
       <br>
     <main>
       <div id='d3cont'></div>
+      <div id='underbar'></div>
     </main>
 
   </body>
 
 <script>
-
     let screen_width  = screen.width;
     let width = Math.floor(screen_width/2.8);
     let height = Math.floor(screen_width/2.8);
@@ -42,13 +44,13 @@
     let point_elems = [];
     let selected = [];
 
+    //APPENDING ELEMENTS TO DOCUMENT
     let svg = d3.select("#d3cont")
                 .append("svg")
                 .attr("width", width)
                 .attr("height", height)
                 //center svg on page
                 .attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
-
 
     let border_n_grid = svg.append("g");
     let main_node = svg.append("g");
@@ -60,7 +62,6 @@
 
     if (width%grid_tile_size != 0) g_rows++;
     if (g_cols%grid_tile_size != 0) g_cols++;
-
 
     for(let r = 0; r < g_rows; r++)
     {
@@ -118,13 +119,24 @@
                  .attr("stroke", "black")
                  .attr("stroke-width", 4);
 
+    let exportButton = d3.select("#underbar")
+                         .attr("text-align","center")
+                         .attr("class","center")
+                         .append("button")
+                         .html("EXPORT")
+                         .on("click", () => exportSVG());
+
+    //EVENT BINDINGS
     svg.on("click", function(){
       last_click = d3.mouse(this);
       point_elems.push(main_node.append("circle")
                                 .attr("cx", last_click[0])
                                 .attr("cy", last_click[1])
                                 .attr("r", 2)
-                                .attr("fill", colors[0]));
+                                .attr("fill", "black")
+                                .attr("stroke-width", 1)
+                                .attr("stroke", "white"));
+
       points.push(last_click);
       });
 
@@ -135,42 +147,41 @@
     d3.select(window).on('keypress', function(){
       let k = d3.event.key;
       //top row of letter keys correspond to the 10 colors we can choose from to fill a polygon
-      if(k == 'q' || k == 'w' || k == 'e' || k == 'r' || k == 't' || k == 'y' || k == 'u' || k == 'i' || k == 'o' || k == 'p')
+      if(k == '1' || k == '2' || k == '3' || k == '4' || k == '5' || k == '6' || k == '7' || k == '8' || k == '9' || k == '0')
       {
         let color;
 
         switch(k){
-          case "q":
+          case "1":
             color = colors[0];
             break;
-          case "w":
+          case "2":
             color = colors[1];
             break;
-          case "e":
+          case "3":
             color = colors[2];
             break;
-          case "r":
+          case "4":
             color = colors[3];
             break;
-          case "t":
+          case "5":
             color = colors[4];
             break;
-          case "y":
+          case "6":
             color = colors[5];
             break;
-          case "u":
+          case "7":
             color = colors[6];
             break;
-          case "i":
+          case "8":
             color = colors[7];
             break;
-          case "o":
+          case "9":
             color = colors[8];
             break;
-          case "p":
+          case "0":
             color = colors[9];
             break;
-
         }
 
         if(points.length > 2)
@@ -232,6 +243,60 @@
                                       d3.select(this).attr('stroke-width', 0);
                                     }
                                    });
+  };
+
+  //TODO add this to its own file helperfunctions.js and include in future projects
+  //returns a new string with toRemove removed
+  function removeFromString(string, toRemove)
+  {
+    let beginIndex = string.indexOf(toRemove);
+    if(beginIndex == -1) return string;
+    let endIndex = beginIndex + toRemove.length;
+    return string.slice(0,beginIndex) + string.slice(endIndex,string.length);
+  };
+
+  //TODO add this to its own file helperfunctions.js and include in future projects
+  //returns a new string with toInsert added at given index insertIndex
+  function stringInsert(string, toInsert, insertIndex)
+  {
+    let strBegin = string.slice(0,insertIndex);
+    let strEnd = string.slice(insertIndex,string.length);
+    return strBegin.concat(toInsert,strEnd);
+  };
+
+  function exportSVG()
+  {
+    let toExport = main_node.node();
+    let groupStr;
+    if(window.ActiveXObject)
+    {
+      groupStr = toExport.xml;
+    }
+    else
+    {
+      let oSerializer = new XMLSerializer();
+      groupStr = oSerializer.serializeToString(toExport);
+      groupStr = encodeURIComponent(groupStr);
+    }
+
+    let svgBegin = "data:image/svg+xml;utf8,%3Csvg%20width%3D%22".concat(width,"%22%20height%3D%22",height,"%22%3E");
+    let svgEnd = "%3C%2Fsvg%3E";
+    let svgString = svgBegin + groupStr + svgEnd;
+    //creating link element but not appending it to document
+    let link = document.createElement('a');
+    let fileName = prompt("Save as:","svg");
+    link.download = fileName;
+    link.href = svgString;
+    //remove svg styling xml tag from group
+    let xmlnsTag = "xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20";
+    link.href = removeFromString(link.href, xmlnsTag);
+    //then add it to svg element instead
+    let svgTag = "%3Csvg%20";
+    let insertIndex = link.href.indexOf(svgTag)+svgTag.length;
+    link.href = stringInsert(link.href, xmlnsTag, insertIndex);
+    console.log(link.href);
+    //will behave as if user clicked created link element (initiating download)
+    link.click();
   };
 
   //remove a selected element
@@ -312,7 +377,6 @@
   //rotate everything in selected around midpoint of selected objects
   function rotateSelected(degrees)
   {
-
     if (selected.length == 0) return false;
 
     let xSum = 0;
@@ -348,7 +412,6 @@
         d3.select(selected[i]).attr("transform", "rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")"));
         continue;
       }
-      
 
       let rotateInd = transform_str.indexOf("rotate");
 
@@ -366,7 +429,6 @@
         d3.select(selected[i]).attr("transform", transform_str.concat(" rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")")));
       }
     }
-
     return true;
   }
 
@@ -430,7 +492,6 @@
         {
           d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],") ").concat(transform_str));
         }
-        
       }
     }
     //if enter key is pressed, duplicate selected
@@ -451,7 +512,6 @@
       else rotateSelected(2);
     }
   };
-
   </script>
 
 </html>
