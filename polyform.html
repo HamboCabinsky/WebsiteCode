@@ -33,485 +33,770 @@
 
   </body>
 
-<script>
-    let screen_width  = screen.width;
-    let width = Math.floor(screen_width/2.8);
-    let height = Math.floor(screen_width/2.8);
-    let last_click = null;
-    let colors = ['black', 'white', 'pink', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple'];
-    let shapes = [];
-    let points = [];
-    let point_elems = [];
-    let selected = [];
-
-    //APPENDING ELEMENTS TO DOCUMENT
-    let svg = d3.select("#d3cont")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height)
-                //center svg on page
-                .attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
-
-    let border_n_grid = svg.append("g");
-    let main_node = svg.append("g");
-    main_node.attr("id","main_node");
-    
-    let grid_tile_size = 50;
-    let g_rows = Math.floor(width/grid_tile_size);
-    let g_cols = Math.floor(height/grid_tile_size);
-
-    if (width%grid_tile_size != 0) g_rows++;
-    if (g_cols%grid_tile_size != 0) g_cols++;
-
-    for(let r = 0; r < g_rows; r++)
-    {
-      for(let c = 0; c < g_cols; c++)
-      {
-        if(r%2 ==0)
-        {
-          if(c%2 == 0)
-          {
-            border_n_grid.append("rect")
-                         .attr("x",r*grid_tile_size)                        
-                         .attr("y",c*grid_tile_size)
-                         .attr("width",grid_tile_size)
-                         .attr("height",grid_tile_size)
-                         .attr("fill", "gainsboro");
-          }
-          else
-          {
-            border_n_grid.append("rect")
-                         .attr("x",r*grid_tile_size)                        
-                         .attr("y",c*grid_tile_size)
-                         .attr("width",grid_tile_size)
-                         .attr("height",grid_tile_size)
-                         .attr("fill", "white");
-          }
-        }
-        else
-        {
-          if(c%2 == 1)
-          {
-            border_n_grid.append("rect")
-                         .attr("x",r*grid_tile_size)                        
-                         .attr("y",c*grid_tile_size)
-                         .attr("width",grid_tile_size)
-                         .attr("height",grid_tile_size)
-                         .attr("fill", "gainsboro");
-          }
-          else
-          {
-            border_n_grid.append("rect")
-                         .attr("x",r*grid_tile_size)                        
-                         .attr("y",c*grid_tile_size)
-                         .attr("width",grid_tile_size)
-                         .attr("height",grid_tile_size)
-                         .attr("fill", "white");
-          }
-        }
-      }
-    }
-
-    border_n_grid.append("rect")
-                 .attr("width", width)
-                 .attr("height", height)
-                 .attr("fill", "none")
-                 .attr("stroke", "black")
-                 .attr("stroke-width", 4);
-
-    let exportButton = d3.select("#underbar")
+  <script>
+      let screen_width  = screen.width;
+      let width = Math.floor(screen_width/2.8);
+      let height = Math.floor(screen_width/2.8);
+      let last_click = null;
+      let colors = ['black', 'white', 'pink', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple'];
+      let shapes = [];
+      let points = [];
+      let point_elems = [];
+      let selected = [];
+  
+      //APPENDING ELEMENTS TO DOCUMENT
+      let svg = d3.select("#d3cont")
+                  .append("svg")
+                  .attr("width", width)
+                  .attr("height", height)
+                  //center svg on page
+                  .attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
+  
+      let border_n_grid = svg.append("g");
+      let main_node = svg.append("g");
+      main_node.attr("id","main_node");
+  
+      //paint background grid
+      paintAlphaGrid(width,height);
+      
+      let exportButton = d3.select("#underbar")
+                           .attr("text-align","center")
+                           .attr("class","center")
+                           .append("button")
+                           .html("EXPORT")
+                           .on("click", () => exportSVG());
+  
+     let bgImgButton = d3.select("#underbar")
                          .attr("text-align","center")
                          .attr("class","center")
                          .append("button")
-                         .html("EXPORT")
-                         .on("click", () => exportSVG());
-
-    //EVENT BINDINGS
-    svg.on("click", function(){
-      last_click = d3.mouse(this);
-      point_elems.push(main_node.append("circle")
-                                .attr("cx", last_click[0])
-                                .attr("cy", last_click[1])
-                                .attr("r", 2)
-                                .attr("fill", "black")
-                                .attr("stroke-width", 1)
-                                .attr("stroke", "white"));
-
-      points.push(last_click);
-      });
-
-    svg.on("contextmenu", function(){
-              d3.event.preventDefault();
+                         .html("LINK REF IMG")
+                         .on("click", () => addbgRef());
+  
+      //EVENT BINDINGS
+      svg.on("click", function(){
+        last_click = d3.mouse(this);
+        point_elems.push(main_node.append("circle")
+                                  .attr("cx", last_click[0])
+                                  .attr("cy", last_click[1])
+                                  .attr("r", 2)
+                                  .attr("fill", "black")
+                                  .attr("stroke-width", 1)
+                                  .attr("stroke", "white"));
+  
+        points.push(last_click);
         });
-
-    d3.select(window).on('keypress', function(){
-      let k = d3.event.key;
-      //top row of letter keys correspond to the 10 colors we can choose from to fill a polygon
-      if(k == '1' || k == '2' || k == '3' || k == '4' || k == '5' || k == '6' || k == '7' || k == '8' || k == '9' || k == '0')
-      {
-        let color;
-
-        switch(k){
-          case "1":
-            color = colors[0];
-            break;
-          case "2":
-            color = colors[1];
-            break;
-          case "3":
-            color = colors[2];
-            break;
-          case "4":
-            color = colors[3];
-            break;
-          case "5":
-            color = colors[4];
-            break;
-          case "6":
-            color = colors[5];
-            break;
-          case "7":
-            color = colors[6];
-            break;
-          case "8":
-            color = colors[7];
-            break;
-          case "9":
-            color = colors[8];
-            break;
-          case "0":
-            color = colors[9];
-            break;
-        }
-
-        if(points.length > 2)
+  
+      svg.on("contextmenu", function(){
+                d3.event.preventDefault();
+          });
+  
+      d3.select(window).on('keypress', function(){
+        let k = d3.event.key;
+        //top row of letter keys correspond to the 10 colors we can choose from to fill a polygon
+        if(k == '1' || k == '2' || k == '3' || k == '4' || k == '5' || k == '6' || k == '7' || k == '8' || k == '9' || k == '0')
         {
-          let pointsStr = "";
-          pointsStr = pointsStr.concat(points[0][0],",",points[0][1]);
-
-          for(let i = 1; i < points.length; i++)
-          {
-            pointsStr = pointsStr.concat(" ",points[i][0],",",points[i][1]);
+          let color;
+  
+          switch(k){
+            case "1":
+              color = colors[0];
+              break;
+            case "2":
+              color = colors[1];
+              break;
+            case "3":
+              color = colors[2];
+              break;
+            case "4":
+              color = colors[3];
+              break;
+            case "5":
+              color = colors[4];
+              break;
+            case "6":
+              color = colors[5];
+              break;
+            case "7":
+              color = colors[6];
+              break;
+            case "8":
+              color = colors[7];
+              break;
+            case "9":
+              color = colors[8];
+              break;
+            case "0":
+              color = colors[9];
+              break;
           }
-          
-          shapes.push(main_node.append("polygon")
-                               .attr("points", pointsStr)
-                               .attr("fill", color)
-                               .on("contextmenu", function()
-                               {
-
-                                let index = selected.indexOf(this);
-                                if(index == -1)
-                                {
-                                  selected.push(this);
-                                  d3.select(this).attr('stroke-width', 4)
-                                                 .attr('stroke', "gold");
-                                }
-                                else
-                                {
-                                  selected.splice(index,1);
-                                  d3.select(this).attr('stroke-width', 0);
-                                }
-                                
-                               }
-                               ));
-          point_elems.forEach(point => point.remove());
-          points = [];
-          point_elems = [];
-        }
-      }  
-    });
-
-    document.onkeydown = checkKey;
-
-    function cloneElem(elem)
-    {
-      shapes.push(d3.select(elem).clone([true]));
-      shapes[shapes.length-1].attr('stroke-width', 0)
-                             .on("contextmenu", function()
-                                   {
-                                    let index = selected.indexOf(this);
-                                    if(index == -1)
-                                    {
-                                      selected.push(this);
-                                      d3.select(this).attr('stroke-width', 4)
-                                                     .attr('stroke', "gold");
-                                    }
-                                    else
-                                    {
-                                      selected.splice(index,1);
-                                      d3.select(this).attr('stroke-width', 0);
-                                    }
-                                   });
-  };
-
-  //TODO add this to its own file helperfunctions.js and include in future projects
-  //returns a new string with toRemove removed
-  function removeFromString(string, toRemove)
-  {
-    let beginIndex = string.indexOf(toRemove);
-    if(beginIndex == -1) return string;
-    let endIndex = beginIndex + toRemove.length;
-    return string.slice(0,beginIndex) + string.slice(endIndex,string.length);
-  };
-
-  //TODO add this to its own file helperfunctions.js and include in future projects
-  //returns a new string with toInsert added at given index insertIndex
-  function stringInsert(string, toInsert, insertIndex)
-  {
-    let strBegin = string.slice(0,insertIndex);
-    let strEnd = string.slice(insertIndex,string.length);
-    return strBegin.concat(toInsert,strEnd);
-  };
-
-  function exportSVG()
-  {
-    let toExport = main_node.node();
-    let groupStr;
-    if(window.ActiveXObject)
-    {
-      groupStr = toExport.xml;
-    }
-    else
-    {
-      let oSerializer = new XMLSerializer();
-      groupStr = oSerializer.serializeToString(toExport);
-      groupStr = encodeURIComponent(groupStr);
-    }
-
-    let svgBegin = "data:image/svg+xml;utf8,%3Csvg%20width%3D%22".concat(width,"%22%20height%3D%22",height,"%22%3E");
-    let svgEnd = "%3C%2Fsvg%3E";
-    let svgString = svgBegin + groupStr + svgEnd;
-    //creating link element but not appending it to document
-    let link = document.createElement('a');
-    let fileName = prompt("Save as:","svg");
-    link.download = fileName;
-    link.href = svgString;
-    //remove svg styling xml tag from group
-    let xmlnsTag = "xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20";
-    link.href = removeFromString(link.href, xmlnsTag);
-    //then add it to svg element instead
-    let svgTag = "%3Csvg%20";
-    let insertIndex = link.href.indexOf(svgTag)+svgTag.length;
-    link.href = stringInsert(link.href, xmlnsTag, insertIndex);
-    console.log(link.href);
-    //will behave as if user clicked created link element (initiating download)
-    link.click();
-  };
-
-  //remove a selected element
-  function removeElem(elem)
-  {
-    d3.select(elem).remove();
-    for(let i = 0; i < shapes.length; i++)
-    {
-      if(elem == shapes[i]._groups[0][0]) return shapes.splice(i,1);
-    }
-    return null;
-  }
-
-  //get translation x & y from a d3 selection element
-  function getTranslation(elem)
-  {
-    let translate = [0,0];
-    let transform_str = elem.attr("transform");
-
-    //return [0,0] if we havent yet done any transformation on selected shape
-    if(transform_str == null) return translate;
-
-    let translateStrInd = transform_str.indexOf("translate");
-
-    //if we haven't translated element return [0,0]
-    if(translateStrInd == -1) return translate;
-
-    //otherwise parse transform string for translation x and y values
-    let tslStrStart = transform_str.indexOf("(", translateStrInd)+1;
-    let tslStrY = transform_str.indexOf(",", tslStrStart)+1;
-    let tslStrEnd = transform_str.indexOf(")", tslStrY);
-    translate[0] = parseInt(transform_str.substring(tslStrStart,tslStrY-1));
-    translate[1] = parseInt(transform_str.substring(tslStrY,tslStrEnd));
-
-    return translate;
-  }
-
-  //get rotation of a d3 selection element
-  function getRotation(elem)
-  {
-    let rotation = [0,0,0];
-    let transform_str = elem.attr("transform");
-    let num_elems;
-
-    //return [0,0] if we havent yet done any transformation on selected shape
-    if(transform_str == null) return rotation;
-
-    let rotationStrInd = transform_str.indexOf("rotate");
-
-    //if we haven't rotated element return [0,0,0]
-    if(rotationStrInd == -1) return rotation;
-
-    //otherwise parse transform string for translation x and y values
-    let rotStrStart = transform_str.indexOf("(", rotationStrInd)+1;
-    let rotStrX = transform_str.indexOf(",", rotStrStart)+1;
-    let rotStrEnd = transform_str.indexOf(")", rotStrStart);
-
-    if(rotStrX == -1 || rotStrX > rotStrEnd) num_elems = 1;
-    else num_elems = 3;
-
-    if(num_elems == 1)
-    {
-      rotation[0] = parseInt(transform_str.substring(rotStrStart,rotStrEnd));
-    }
-    else
-    {
-      //degrees
-      rotation[0] = parseInt(transform_str.substring(rotStrStart,rotStrX-1));
-      let rotStrY = transform_str.indexOf(",", rotStrX)+1;
-      //x,y value to rotate around
-      rotation[1] = parseInt(transform_str.substring(rotStrX,rotStrY-1));
-      rotation[2] = parseInt(transform_str.substring(rotStrY,rotStrEnd));
-    }
-
-    return rotation;
-  }
-
-  //rotate everything in selected around midpoint of selected objects
-  function rotateSelected(degrees)
-  {
-    if (selected.length == 0) return false;
-
-    let xSum = 0;
-    let ySum = 0;
-    let num_values = 0;
-    let sel_elem = null;
-    let pt_list = null;
-
-    for(let i = 0; i < selected.length; i++)
-    {
-      sel_elem = d3.select(selected[i]);
-      pt_list = sel_elem._groups[0][0].points;
-
-      for(let j = 0; j < pt_list.length; j++)
+  
+          if(points.length > 2)
+          {
+            let pointsStr = "";
+            pointsStr = pointsStr.concat(points[0][0],",",points[0][1]);
+  
+            for(let i = 1; i < points.length; i++)
+            {
+              pointsStr = pointsStr.concat(" ",points[i][0],",",points[i][1]);
+            }
+            
+            shapes.push(main_node.append("polygon")
+                                 .attr("points", pointsStr)
+                                 .attr("fill", color)
+                                 .on("contextmenu", function()
+                                 {
+  
+                                  let index = selected.indexOf(this);
+                                  if(index == -1)
+                                  {
+                                    selected.push(this);
+                                    d3.select(this).attr('stroke-width', 4)
+                                                   .attr('stroke', "gold");
+                                  }
+                                  else
+                                  {
+                                    selected.splice(index,1);
+                                    d3.select(this).attr('stroke-width', 0);
+                                  }
+                                  
+                                 }
+                                 ));
+            point_elems.forEach(point => point.remove());
+            points = [];
+            point_elems = [];
+          }
+        }  
+      });
+  
+      document.onkeydown = checkKey;
+  
+      function paintAlphaGrid(width, height)
       {
-        xSum += sel_elem._groups[0][0].points[j].x;
-        ySum += sel_elem._groups[0][0].points[j].y;
-        num_values++;
-      }
-
-      let origin = [Math.floor(xSum/num_values), Math.floor(ySum/num_values)];
-
-      xSum = 0;
-      ySum = 0;
-      num_values = 0;
-
-      let transform_str = d3.select(selected[i]).attr("transform");
-      let rotation = getRotation(d3.select(selected[i]));
-
-      //if we havent done any transformations yet, no other pieces of string to worry about
-      if(transform_str == null) 
-      {
-        d3.select(selected[i]).attr("transform", "rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")"));
-        continue;
-      }
-
-      let rotateInd = transform_str.indexOf("rotate");
-
-      //if we've already rotated, need to insert translation into proper place in string
-      if(rotateInd != -1 || (origin[0] == rotation[1] && origin[1] == rotation[2]))
-      {
-        let rotateEnd = transform_str.indexOf(")", rotateInd);
-        let newTFb4 = transform_str.slice(0, rotateInd);
-        let newTFAfter = transform_str.slice(rotateEnd+1, transform_str.length);
-        let TFInsert ="rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")");
-        d3.select(selected[i]).attr("transform", newTFb4 + newTFAfter + TFInsert);
-      }
-      else
-      {
-        d3.select(selected[i]).attr("transform", transform_str.concat(" rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")")));
-      }
-    }
-    return true;
-  }
-
-  function checkKey(e)
-  {
-    //console.log(e.keyCode);
-    //arrow keys, translate selected
-    if(e.keyCode >= 37 && e.keyCode <= 40)
-    {
-      e.preventDefault();
-      let toTranslate;
-
-      switch(e.keyCode)
-      {
-        case 37:
-          toTranslate = [-4,0];
-          break;
-        case 38:
-          toTranslate = [0,-4];
-          break;
-        case 39:
-          toTranslate = [4,0];
-          break;
-        case 40:
-          toTranslate = [0,4];
-          break;
-      }
-      
-      for(let i = 0; i < selected.length; i++)
-      {
-        //transform property as string
-        let t = getTranslation(d3.select(selected[i]));
-        let final_toT = [toTranslate[0],toTranslate[1]];
-        if(t)
+        let grid_tile_size = Math.floor(width/20);
+        let g_rows = Math.floor(width/grid_tile_size);
+        let g_cols = Math.floor(height/grid_tile_size);
+  
+        if (width%grid_tile_size != 0) g_rows++;
+        if (g_cols%grid_tile_size != 0) g_cols++;
+  
+        for(let r = 0; r < g_rows; r++)
         {
-          final_toT[0] += t[0];
-          final_toT[1] += t[1];
+          for(let c = 0; c < g_cols; c++)
+          {
+            if(r%2 ==0)
+            {
+              if(c%2 == 0)
+              {
+                border_n_grid.append("rect")
+                             .attr("x",r*grid_tile_size)                        
+                             .attr("y",c*grid_tile_size)
+                             .attr("width",grid_tile_size)
+                             .attr("height",grid_tile_size)
+                             .attr("fill", "gainsboro")
+                             .attr("class", "alpha");
+              }
+              else
+              {
+                border_n_grid.append("rect")
+                             .attr("x",r*grid_tile_size)                        
+                             .attr("y",c*grid_tile_size)
+                             .attr("width",grid_tile_size)
+                             .attr("height",grid_tile_size)
+                             .attr("fill", "white")
+                             .attr("class", "alpha");
+              }
+            }
+            else
+            {
+              if(c%2 == 1)
+              {
+                border_n_grid.append("rect")
+                             .attr("x",r*grid_tile_size)                        
+                             .attr("y",c*grid_tile_size)
+                             .attr("width",grid_tile_size)
+                             .attr("height",grid_tile_size)
+                             .attr("fill", "gainsboro")
+                             .attr("class", "alpha");
+              }
+              else
+              {
+                border_n_grid.append("rect")
+                             .attr("x",r*grid_tile_size)                        
+                             .attr("y",c*grid_tile_size)
+                             .attr("width",grid_tile_size)
+                             .attr("height",grid_tile_size)
+                             .attr("fill", "white")
+                             .attr("class", "alpha");
+              }
+            }
+          }
         }
-
-        let transform_str = d3.select(selected[i]).attr("transform");
-
-        //if we havent done any transformations yet, no other pieces of string to worry about
-        if(transform_str == null) 
-        {
-          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
-          continue;
-        }
-
-        let translateInd = transform_str.indexOf("translate");
-
-        //if we've already translated, need to insert translation into proper place in string
-        if(translateInd != -1)
-        {
-          let translateEnd = transform_str.indexOf(")", translateInd);
-          let newTFb4 = transform_str.slice(0, translateInd);
-          let newTFAfter = transform_str.slice(translateEnd+1, transform_str.length);
-          let TFInsert = "translate(".concat(final_toT[0],",",final_toT[1],")");
-          d3.select(selected[i]).attr("transform", newTFb4 + TFInsert + newTFAfter);
+  
+        border_n_grid.append("rect")
+                     .attr("width", width)
+                     .attr("height", height)
+                     .attr("fill", "none")
+                     .attr("stroke", "black")
+                     .attr("stroke-width", 4);
+      };
+  
+      function removeGrid()
+      {
+        border_n_grid.selectAll('.alpha').remove();
+      };
+  
+      function addbgRef()
+      {
+        if(d3.select('canvas')._groups[0][0] != null) d3.select('canvas').remove();
+        let fileName = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
+        removeGrid();
+        let c = d3.select('#d3cont').append('canvas').attr('width',width/1.16).attr('height',height/1.16);
+        document.getElementsByTagName('CANVAS')[0].style.position = 'absolute';
+        document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/1.96-width/2),'px');
+        let ctx = c.node().getContext('2d');
+        let img = new Image();
+        img.src = fileName;
+        let aspect = img.width/img.height;
+        let paintWidth, paintHeight;
+        if(aspect >= 1){
+          paintWidth = width;
+          paintHeight = height/aspect;
         }
         else
         {
-          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],") ").concat(transform_str));
+          paintHeight = height;
+          paintWidth = width*aspect;
+        }
+  
+        img.onload = () => ctx.drawImage(img,0,0,paintWidth,paintHeight);
+        d3.select('canvas').lower();
+      };
+  
+      function cloneElem(elem)
+      {
+        shapes.push(d3.select(elem).clone([true]));
+        shapes[shapes.length-1].attr('stroke-width', 0)
+                               .on("contextmenu", function()
+                                     {
+                                      let index = selected.indexOf(this);
+                                      if(index == -1)
+                                      {
+                                        selected.push(this);
+                                        d3.select(this).attr('stroke-width', 4)
+                                                       .attr('stroke', "gold");
+                                      }
+                                      else
+                                      {
+                                        selected.splice(index,1);
+                                        d3.select(this).attr('stroke-width', 0);
+                                      }
+                                     });
+    };
+  
+    //TODO add this to its own file helperfunctions.js and include in future projects
+    //returns a new string with toRemove removed
+    function removeFromString(string, toRemove)
+    {
+      let beginIndex = string.indexOf(toRemove);
+      if(beginIndex == -1) return string;
+      let endIndex = beginIndex + toRemove.length;
+      return string.slice(0,beginIndex) + string.slice(endIndex,string.length);
+    };
+  
+    //TODO add this to its own file helperfunctions.js and include in future projects
+    //returns a new string with toInsert added at given index insertIndex
+    function stringInsert(string, toInsert, insertIndex)
+    {
+      let strBegin = string.slice(0,insertIndex);
+      let strEnd = string.slice(insertIndex,string.length);
+      return strBegin.concat(toInsert,strEnd);
+    };
+  
+    //select/deselect all, called when 'a' is pressed
+    function selectAll()
+    {
+      let nothingSelected = selected.length == 0;
+      //if nothing selected select all
+      if(nothingSelected)
+      {
+        for(let i = 0; i < shapes.length; i++)
+        {
+          selected.push(shapes[i]._groups[0][0]);
+          shapes[i].attr('stroke-width', 4)
+                   .attr('stroke', "gold");
         }
       }
-    }
-    //if enter key is pressed, duplicate selected
-    else if(e.keyCode == 13)
+      //if anything selected deselect all
+      else
+      {
+        for(let i = 0; i < shapes.length; i++)
+        {
+          shapes[i].attr('stroke-width', 0);
+        }
+        selected = [];
+      }
+    };
+  
+    function exportSVG()
     {
-      selected.forEach(elem => cloneElem(elem));
-    }
-    //if backspace pressed, delete selected
-    else if (e.keyCode == 8)
+      if(selected.length != 0) selectAll();
+      let toExport = main_node.node();
+      let groupStr;
+      if(window.ActiveXObject)
+      {
+        groupStr = toExport.xml;
+      }
+      else
+      {
+        let oSerializer = new XMLSerializer();
+        groupStr = oSerializer.serializeToString(toExport);
+        groupStr = encodeURIComponent(groupStr);
+      }
+  
+      let svgBegin = "data:image/svg+xml;utf8,%3Csvg%20width%3D%22".concat(width,"%22%20height%3D%22",height,"%22%3E");
+      let svgEnd = "%3C%2Fsvg%3E";
+      let svgString = svgBegin + groupStr + svgEnd;
+      //creating link element but not appending it to document
+      let link = document.createElement('a');
+      let fileName = prompt("Save as:","svg");
+      link.download = fileName;
+      link.href = svgString;
+      //remove svg styling xml tag from group
+      let xmlnsTag = "xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20";
+      link.href = removeFromString(link.href, xmlnsTag);
+      //then add it to svg element instead
+      let svgTag = "%3Csvg%20";
+      let insertIndex = link.href.indexOf(svgTag)+svgTag.length;
+      link.href = stringInsert(link.href, xmlnsTag, insertIndex);
+      //will behave as if user clicked created link element (initiating download)
+      link.click();
+    };
+  
+    //remove a selected element
+    function removeElem(elem)
     {
-      selected.forEach(elem => removeElem(elem));
-      selected = [];
+      d3.select(elem).remove();
+      for(let i = 0; i < shapes.length; i++)
+      {
+        if(elem == shapes[i]._groups[0][0]) return shapes.splice(i,1);
+      }
+      return null;
     }
-    //if < or > pressed, rotate selected
-    else if(e.keyCode == 188 || e.keyCode == 190)
+  
+    //get translation x & y from a d3 selection element
+    function getTranslation(elem)
     {
-      if(e.keyCode == 188) rotateSelected(-2);
-      else rotateSelected(2);
+      let translate = [0,0];
+      let transform_str = elem.attr("transform");
+  
+      //return [0,0] if we havent yet done any transformation on selected shape
+      if(transform_str == null) return translate;
+  
+      let translateStrInd = transform_str.indexOf("translate");
+  
+      //if we haven't translated element return [0,0]
+      if(translateStrInd == -1) return translate;
+  
+      //otherwise parse transform string for translation x and y values
+      let tslStrStart = transform_str.indexOf("(", translateStrInd)+1;
+      let tslStrY = transform_str.indexOf(",", tslStrStart)+1;
+      let tslStrEnd = transform_str.indexOf(")", tslStrY);
+      translate[0] = parseInt(transform_str.substring(tslStrStart,tslStrY-1));
+      translate[1] = parseInt(transform_str.substring(tslStrY,tslStrEnd));
+  
+      return translate;
     }
-  };
-  </script>
+  
+    //used to parse number values from last rotation in transform string
+    function getRotation(string)
+    {
+      let rotation = [0,0,0];
+  
+      //return [0,0] if we havent yet done any transformation on selected shape
+      if(string == null) return rotation;
+  
+      //otherwise parse transform string for translation x and y values
+      let rotStrStart = string.indexOf("(")+1;
+      let rotStrX = string.indexOf(",", rotStrStart)+1;
+      let rotStrEnd = string.indexOf(")", rotStrStart);
+  
+      //degrees
+      rotation[0] = parseInt(string.substring(rotStrStart,rotStrX-1));
+      let rotStrY = string.indexOf(",", rotStrX)+1;
+      //x,y value to rotate around
+      rotation[1] = parseInt(string.substring(rotStrX,rotStrY-1));
+      rotation[2] = parseInt(string.substring(rotStrY,rotStrEnd));
+  
+      return rotation;
+    }
+  
+  /* Most likely will no longer be necessary but will keep for now just in case
+    function getScale(elem)
+    {
+      let scale = [1,1];
+      let transform_str = elem.attr("transform");
+  
+      //return [1,1] if we havent yet done any transformation on selected shape
+      if(transform_str == null) return scale;
+  
+      let scaleStrInd = transform_str.indexOf("scale");
+  
+      //if we haven't translated element return [1,1]
+      if(scaleStrInd == -1) return scale;
+  
+      //otherwise parse transform string for translation x and y values
+      let sclStrStart = transform_str.indexOf("(", scaleStrInd)+1;
+      let sclStrY = transform_str.indexOf(",", sclStrStart)+1;
+      let sclStrEnd = transform_str.indexOf(")", sclStrY);
+      scale[0] = parseFloat(transform_str.substring(sclStrStart,sclStrY-1));
+      scale[1] = parseFloat(transform_str.substring(sclStrY,sclStrEnd));
+  
+      return scale;
+    };
+    */
+  
+    function applyRotation(elem)
+    {
+      if(elem.attr("transform") == null) return;
+      let new_transform = elem.attr("transform").split(/\s+/);
+      let rotation = [0,0,0];
+      let pt_list, pt_str;
+      let dX, dY, newX, newY, r, angle;
+      for(let i = 0; i < new_transform.length; i++)
+      {
+        if(new_transform[i].slice(0,6) == "rotate")
+        {
+          rotation = getRotation(new_transform.splice(i,1)[0]);
+          pt_list = elem._groups[0][0].points;
+          pt_str = "";
+          for(let j = 0; j < pt_list.length; j++)
+          {
+            dX = pt_list[j].x - rotation[1];
+            dY = rotation[2] - pt_list[j].y;
+            r = Math.sqrt(dX**2 + dY**2);
+            angle = Math.atan2(dY,dX) - rotation[0]*Math.PI/180;
+            newX = rotation[1] + r*Math.cos(angle);
+            newY = rotation[2] - r*Math.sin(angle);
+  
+            pt_str = pt_str.concat(newX,",");
+            pt_str = pt_str.concat(newY," ");
+          }
+          elem.attr("points", pt_str);   
+        }
+      }
+      elem.attr("transform", new_transform.join(" "));
+    };
+  
+    function applyScale(elem, factorX, factorY)
+    {
+      let scale = [factorX,factorY];
+      let pt_list, pt_str;
+      let xSum = 0;
+      let new_pts = [];
+      let ySum = 0;
+      let num_values = 0;
+      for(let i = 0; i < selected.length; i++)
+      {
+        pt_list = selected[i].points;
+        for(let j = 0; j < pt_list.length; j++)
+        {
+          xSum += pt_list[j].x;
+          ySum += pt_list[j].y;
+          num_values++;
+        }
+      }
+      
+      let origin = [xSum/num_values, ySum/num_values];
+      let x,y;
+      pt_str = "";
+      pt_list = elem._groups[0][0].points;
+      for(let j = 0; j < pt_list.length; j++)
+      {
+        x = (pt_list[j].x-origin[0])*scale[0];
+        y = (pt_list[j].y-origin[1])*scale[1];
+        pt_str = pt_str.concat(origin[0]+x,",");
+        pt_str = pt_str.concat(origin[1]+y," ");
+      }
+      elem.attr("points", pt_str);
+    }
+  
+    function applyTranslation(elem)
+    {
+      let t = getTranslation(elem);
+      if(t[0] == 0 && t[1] == 0) return;
+  
+      let pt_list = elem._groups[0][0].points;
+  
+      let pt_str = "";
+  
+      for(let j = 0; j < pt_list.length; j++)
+      {
+        pt_str = pt_str.concat(pt_list[j].x+t[0],",");
+        pt_str = pt_str.concat(pt_list[j].y+t[1]," ");
+      }   
+  
+      elem.attr("points", pt_str);
+      let new_transform = elem.attr("transform").split(/\s+/);
+      new_transform.shift();
+      elem.attr("transform", new_transform.join(" "));
+    };
+  
+    //rotate everything in selected around midpoint of selected objects
+    function rotateSelected(degrees)
+    {
+      if (selected.length == 0) return false;
+  
+      let xSum = 0;
+      let ySum = 0;
+      let num_values = 0;
+      let sel_elem = null;
+      let pt_list = null;
+      let translation;
+  
+      for(let i = 0; i < selected.length; i++)
+      {
+        sel_elem = d3.select(selected[i]);
+        
+        applyTranslation(sel_elem);
+        applyRotation(sel_elem);
+  
+        pt_list = sel_elem._groups[0][0].points;
+  
+        for(let j = 0; j < pt_list.length; j++)
+        {
+          xSum += sel_elem._groups[0][0].points[j].x;
+          ySum += sel_elem._groups[0][0].points[j].y;
+          num_values++;
+        }   
+      }
+  
+      let origin = [Math.floor(xSum/num_values), Math.floor(ySum/num_values)];
+  
+      for(let i = 0; i < selected.length; i++)
+      {
+  
+        let transform_str = d3.select(selected[i]).attr("transform");
+  
+        //if we havent done any transformations yet, no other pieces of string to worry about
+        if(transform_str == null) 
+        {
+          d3.select(selected[i]).attr("transform", "rotate(".concat(degrees, ",", origin[0], ",", origin[1], ")"));
+          continue;
+        }
+  
+        //let rotateInd = transform_str.indexOf("rotate");
+        let rotatedLast = transform_str.split(/\s+/).slice(-1)[0].slice(0,6) == "rotate";
+        let rotation = [0,0,0];
+        if(rotatedLast) rotation = getRotation(transform_str.split(/\s+/).slice(-1)[0]);
+  
+        
+        //if we've already rotated, need to insert translation into proper place in string
+        if(rotatedLast && origin[0] == rotation[1] && origin[1] == rotation[2])
+        {
+          let splitTF = d3.select(selected[i]).attr("transform").split(/\s+/);
+          splitTF.pop()
+          splitTF.push("rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")"));
+          d3.select(selected[i]).attr("transform", splitTF.join(' '));
+        }
+        else
+        {
+          d3.select(selected[i]).attr("transform", transform_str.concat(" rotate(".concat(degrees, ",", origin[0], ",", origin[1], ")")));
+        }
+        d3.select(selected[i]).attr("transform", d3.select(selected[i]).attr("transform").split(/\s+/).join(' '));
+      }
+      return true;
+    };
+  
+    function scaleSelected(factorX,factorY)
+    {
+      for(let i = 0; i < selected.length; i++){
+        applyScale(d3.select(selected[i]),factorX,factorY);
+      }
+      return true;
+    };
+  
+    function darkenSelected()
+    {
+      for(let i = 0; i < selected.length; i++){
+        d3.select(selected[i]).attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).darker(0.3));
+      }
+      return true;
+    };
+  
+    function brightenSelected()
+    {
+      for(let i = 0; i < selected.length; i++){
+        d3.select(selected[i]).attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).brighter(0.3));
+      }
+      return true;
+    };
+  
+    function raiseSelected()
+    {
+      for(let i = 0; i < selected.length; i++)
+      {
+        d3.select(selected[i]).raise();
+      }
+    };
+  
+    function lowerSelected()
+    {
+      for(let i = 0; i < selected.length; i++)
+      {
+        d3.select(selected[i]).lower();
+      }
+    };
+  
+    function lowerOpacity()
+    {
+      let sel_elem;
+      for(let i = 0; i < selected.length; i++)
+      {
+        sel_elem = d3.select(selected[i]);
+        if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity',0.9);
+        else sel_elem.attr('opacity', sel_elem.attr('opacity')*0.9);
+      }
+    };
+  
+    function raiseOpacity()
+    {
+      let sel_elem;
+      for(let i = 0; i < selected.length; i++)
+      {
+        sel_elem = d3.select(selected[i]);
+        if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity',1.1);
+        else sel_elem.attr('opacity', sel_elem.attr('opacity')*1.1);
+      }
+    };
+  
+    //increase hue by 10, called when ~ is pressed
+    function hueShiftRight()
+    {
+      let new_color;
+      for(let i = 0; i < selected.length; i++)
+      {
+        sel_elem = d3.select(selected[i]);
+        new_color = d3.hsl(sel_elem.attr('fill'));
+        new_color.h += 10;
+        sel_elem.attr('fill', new_color);
+      }
+    };
+  
+    function checkKey(e)
+    {
+      console.log(e.keyCode);
+      //arrow keys, translate selected
+      if(e.keyCode >= 37 && e.keyCode <= 40)
+      {
+        e.preventDefault();
+        let toTranslate;
+  
+        switch(e.keyCode)
+        {
+          case 37:
+            toTranslate = [-4,0];
+            break;
+          case 38:
+            toTranslate = [0,-4];
+            break;
+          case 39:
+            toTranslate = [4,0];
+            break;
+          case 40:
+            toTranslate = [0,4];
+            break;
+        }
+        
+        for(let i = 0; i < selected.length; i++)
+        {
+          //transform property as string
+          let t = getTranslation(d3.select(selected[i]));
+          let final_toT = [toTranslate[0],toTranslate[1]];
+          if(t)
+          {
+            final_toT[0] += t[0];
+            final_toT[1] += t[1];
+          }
+  
+          let transform_str = d3.select(selected[i]).attr("transform");
+  
+          //if we havent done any transformations yet, no other pieces of string to worry about
+          if(transform_str == null) 
+          {
+            d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
+            continue;
+          }
+  
+          let translateInd = transform_str.indexOf("translate");
+  
+          //if we've already translated, need to insert translation into proper place in string
+          if(translateInd != -1)
+          {
+            let translateEnd = transform_str.indexOf(")", translateInd);
+            let newTFb4 = transform_str.slice(0, translateInd);
+            let newTFAfter = transform_str.slice(translateEnd+1, transform_str.length);
+            let TFInsert = "translate(".concat(final_toT[0],",",final_toT[1],")");
+            d3.select(selected[i]).attr("transform", newTFb4 + TFInsert + newTFAfter);
+          }
+          else
+          {
+            d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],") ").concat(transform_str));
+          }
+          d3.select(selected[i]).attr("transform", d3.select(selected[i]).attr("transform").split(/\s+/).join(' '));
+        }
+      }
+      //if enter key is pressed, duplicate selected
+      else if(e.keyCode == 13)
+      {
+        selected.forEach(elem => cloneElem(elem));
+      }
+      //if backspace pressed, delete selected
+      else if (e.keyCode == 8)
+      {
+        selected.forEach(elem => removeElem(elem));
+        selected = [];
+      }
+      //if < or > pressed, rotate selected
+      else if(e.keyCode == 188 || e.keyCode == 190)
+      {
+        if(e.keyCode == 188) rotateSelected(-2);
+        else rotateSelected(2);
+      }
+      else if(e.keyCode == 173 || e.keyCode == 61)
+      {
+        //173 is scale down
+        if(e.keyCode == 173) scaleSelected(0.9,0.9);
+        //61 is scale up
+        else scaleSelected(1.1,1.1);
+      }
+      //mirror on x when x key is pressed
+      else if(e.keyCode == 88) scaleSelected(-1,1);
+      //mirror on y when y key is pressed
+      else if(e.keyCode == 89) scaleSelected(1,-1);
+      //brighten color of selected if ; is pressed
+      else if(e.keyCode == 59) brightenSelected();
+      //brighten color of selected if \ is pressed
+      else if(e.keyCode == 220) darkenSelected();
+      //raise on ]
+      else if(e.keyCode == 221) raiseSelected();
+      //lower on [
+      else if(e.keyCode == 219) lowerSelected();
+      //select/deselect all on 'a'
+      else if(e.keyCode == 65) selectAll();
+      //lower opacity on 'o'
+      else if(e.keyCode == 79) lowerOpacity();
+      //raise opacity on 'p'
+      else if(e.keyCode == 80) raiseOpacity();
+      else if(e.keyCode == 192) hueShiftRight();
+  
+    };
+    </script>
+  
+  <footer>
+  <div class="center">
+    Copyright 2022 Christian Bonin
+  </div>
+  </footer>
 
 </html>
