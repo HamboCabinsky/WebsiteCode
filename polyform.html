@@ -35,9 +35,21 @@
 
 <script>
     let screen_width  = screen.width;
-    let width = Math.floor(screen_width/2.8);
-    let height = Math.floor(screen_width/2.8);
-    let last_click = null;
+    let width, height;
+
+    let params = new URLSearchParams(window.location.search);
+    if(params.has('width') && params.has('height'))
+    {
+      width = parseInt(params.get('width'));
+      height = parseInt(params.get('height'));
+    }
+    else
+    {
+      width = Math.floor(screen_width/2.8);
+      height = Math.floor(screen_width/2.8);
+    }
+    
+    let last_click, last_right_click;
     let colors = ['black', 'white', 'pink', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple'];
     let shapes = [];
     let points = [];
@@ -47,6 +59,7 @@
     let redo_history = [];
     let max_undo_steps = 40;
     let id_counter = 0;
+    let last_operation = 0;
 
     //APPENDING ELEMENTS TO DOCUMENT
     let svg = d3.select("#d3cont")
@@ -67,7 +80,7 @@
                          .attr("text-align","center")
                          .attr("class","center")
                          .append("button")
-                         .html("EXPORT")
+                         .html("EXPORT SVG")
                          .on("click", exportSVG);
 
    let bgImgButton = d3.select("#underbar")
@@ -77,10 +90,29 @@
                        .html("LINK REF IMG")
                        .on("click", addbgRef);
 
+   let shareButton = d3.select("#underbar")
+                       .attr("text-align","center")
+                       .attr("class","center")
+                       .append("button")
+                       .html("SHARE")
+                       .on("click", share);
+
+   if(params.has('data')) decode(params.get('data'));
+
     //EVENT BINDINGS
     svg.on("click", function(){
-      undo_history.push(undoElements());
+
       last_click = d3.mouse(this);
+      //avoid accidental double clicks
+      if(last_click)
+      {
+        let click_to_op = parseInt("".concat(last_click[0],last_click[1]))*-1+0.5;
+        if(last_operation == click_to_op) return;
+        last_operation = click_to_op;
+      } 
+
+      undo_history.push(undoElements());
+      
       point_elems.push(main_node.append("circle")
                                 .attr("cx", last_click[0])
                                 .attr("cy", last_click[1])
@@ -96,91 +128,135 @@
               d3.event.preventDefault();
         });
 
-    d3.select(window).on('keypress', function(){
-      let k = d3.event.key;
-      //top row of letter keys correspond to the 10 colors we can choose from to fill a polygon
-      if(k == '1' || k == '2' || k == '3' || k == '4' || k == '5' || k == '6' || k == '7' || k == '8' || k == '9' || k == '0')
+    function contextMenuCalled()
+    {
+      last_right_click = d3.mouse(this);
+      //avoid accidental double clicks
+      let click_to_op = parseInt("".concat(last_right_click[0],last_right_click[1]))*-1;
+      if(last_operation == click_to_op) return;
+      last_operation = click_to_op;
+      
+      undo_history.push(undoElements());
+      while(undo_history.length > max_undo_steps) console.log(undo_history.shift());
+      let index = selected.indexOf(this);
+
+      if(index == -1)
       {
-        undo_history.push(undoElements());
-        if(undo_history.length > max_undo_steps) undo_history.shift();
-        let color;
-
-        switch(k){
-          case "1":
-            color = colors[0];
-            break;
-          case "2":
-            color = colors[1];
-            break;
-          case "3":
-            color = colors[2];
-            break;
-          case "4":
-            color = colors[3];
-            break;
-          case "5":
-            color = colors[4];
-            break;
-          case "6":
-            color = colors[5];
-            break;
-          case "7":
-            color = colors[6];
-            break;
-          case "8":
-            color = colors[7];
-            break;
-          case "9":
-            color = colors[8];
-            break;
-          case "0":
-            color = colors[9];
-            break;
-        }
-
-        if(points.length > 2)
-        {
-          let pointsStr = "";
-          pointsStr = pointsStr.concat(points[0][0],",",points[0][1]);
-
-          for(let i = 1; i < points.length; i++)
-          {
-            pointsStr = pointsStr.concat(" ",points[i][0],",",points[i][1]);
-          }
-          
-          shapes.push(main_node.append("polygon")
-                               .attr("points", pointsStr)
-                               .attr("fill", color)
-                               .on("contextmenu", function()
-                               {
-                                undo_history.push(undoElements());
-                                if(undo_history.length > max_undo_steps) undo_history.shift();
-                                let index = selected.indexOf(this);
-                                if(index == -1)
-                                {
-                                  selected.push(this);
-                                  d3.select(this).attr('stroke-width', 4)
-                                                 .attr('stroke', "gold");
-                                }
-                                else
-                                {
-                                  selected.splice(index,1);
-                                  d3.select(this).attr('stroke-width', 0);
-                                }
-                                
-                               }
-                               )
-                               .attr('id', ''.concat(id_counter)));
-          id_counter++;
-
-          point_elems.forEach(point => point.remove());
-          points = [];
-          point_elems = [];
-        }
-      }  
-    });
+        selected.push(this);
+        d3.select(this).attr('stroke-width', 4)
+                       .attr('stroke', "gold");
+      }
+      else
+      {
+        selected.splice(index,1);
+        d3.select(this).attr('stroke-width', 0);
+      }
+    };
 
     document.onkeydown = checkKey;
+
+    //encode entire svg into a hex str
+    function encode()
+    {
+      for(let i = 0; i < shapes.length; i++)
+      {
+        applyTranslation(shapes[i]);
+        applyRotation(shapes[i]);
+        shapes[i].attr('fill', d3.rgb(shapes[i].attr('fill')).toString());
+      }
+
+      let toEncode = main_node.html();
+      let encodedStr = "";
+      let pt_arr, rgb, endIndex, op_ind, op;
+      let first_iter = true;
+
+      while(toEncode.indexOf('points') != -1)
+      {
+        if(first_iter) first_iter = false;
+        //start new polygon
+        else encodedStr = encodedStr.concat("A");
+        
+        //cut off up to start of points
+        toEncode = toEncode.slice(toEncode.indexOf("\"")+1);
+        //get points as an array
+        pt_arr = toEncode.slice(0,toEncode.indexOf("\"")).split(/[, ]+/);
+        let i;
+        for(i = 0; i < pt_arr.length-1; i++)
+          if(pt_arr[i] != "") encodedStr = encodedStr.concat(parseInt(pt_arr[i]),'B');
+        if(pt_arr[i] != "") encodedStr = encodedStr.concat(parseInt(pt_arr[i]));
+
+        //move on to fill attribute
+        encodedStr = encodedStr.concat('C');
+        toEncode = toEncode.slice(toEncode.indexOf("(")+1);
+        rgb = toEncode.slice(0,toEncode.indexOf(')')).split(/[ ,]+/);
+        encodedStr = encodedStr.concat(rgb[0], 'B', rgb[1], 'B', rgb[2]);
+        endIndex = toEncode.indexOf('</polygon>');
+        op_ind = toEncode.indexOf('opacity');
+        if(op_ind < endIndex && op_ind != -1)
+        {
+          toEncode = toEncode.slice(op_ind);
+          toEncode = toEncode.slice(toEncode.indexOf("\"")+1);
+          //if opacity is >= 1 skip this attribute
+          op = toEncode.slice(0,toEncode.indexOf("\""))
+          if(parseFloat(op) >= 1){
+            toEncode = toEncode.slice(toEncode.indexOf("points"));
+            continue;
+          }
+          encodedStr = encodedStr.concat('D');
+          //else assume its a floating pt, only store whats after the decimal
+          op = op.slice(op.indexOf('.')+1);
+          encodedStr = encodedStr.concat(op);
+        }
+        toEncode = toEncode.slice(toEncode.indexOf("polygon points"));
+      }
+      return encodedStr;
+    };
+
+    function decode(encodedStr)
+    {
+      let enc_shapes = encodedStr.split('A');
+      let attributes, points, fill, opacity, pt_str, fill_str, op_str;
+      for(let i = 0; i < enc_shapes.length; i++)
+      {
+        //split our encoded string into easily parsable arrays
+        attributes = enc_shapes[i].split(/[CD]+/);
+        points = attributes[0].split('B');
+        fill = attributes[1].split('B');
+        //as of right now we are only looking at points, fill, and opacity attributes, opacity optional
+        if(attributes.length > 2) opacity = attributes[2];
+
+        //generate strings for our attributes
+        pt_str = "";
+        for(let i = 0; i < points.length; i+=2) pt_str += points[i] + "," + points[i+1] + " ";
+        fill_str = "rgb(" + fill[0] + ", " + fill[1] + ", " + fill[2] +")";
+
+        if(attributes.length > 2) op_str = "0." + opacity;
+        else op_str = null;
+        //create the shape and give it our attributes
+        shapes.push(main_node.append("polygon")
+                               .attr("points", pt_str)
+                               .attr("fill", fill_str)
+                               .on("contextmenu", contextMenuCalled)
+                               .attr('id', ''.concat(id_counter)));
+        id_counter++;
+
+        //if we have an opacity, apply it
+        if(op_str) shapes[shapes.length-1].attr('opacity', op_str);
+      }
+
+    };
+
+    function share()
+    {
+      let shareStr = "http://54.191.145.57/polyform.html?width=".concat(width,"&height=",height,"&data=");
+      shareStr += encode();
+      if(shareStr.length < 8192)
+      {
+        alert(shareStr);
+      }
+      else alert("URL too large to share, try saving the SVG via EXPORT button and share the file another way");
+      console.log(shareStr);
+    };
 
     function paintAlphaGrid(width, height)
     {
@@ -288,22 +364,7 @@
     {
       let name = attributes[0];
       let new_shape = main_node.append(name)
-                               .on("contextmenu", function()
-                                   {
-                                    undo_history.push(undoElements());
-                                    let index = selected.indexOf(this);
-                                    if(index == -1)
-                                    {
-                                      selected.push(this);
-                                      d3.select(this).attr('stroke-width', 4)
-                                                     .attr('stroke', "gold");
-                                    }
-                                    else
-                                    {
-                                      selected.splice(index,1);
-                                      d3.select(this).attr('stroke-width', 0);
-                                    }
-                                   });
+                               .on("contextmenu", contextMenuCalled);
 
       for(let i = 1; i < attributes.length; i+=2) new_shape.attr(attributes[i], 
                                                                  attributes[i+1]);
@@ -339,7 +400,7 @@
       {
         let revert = undo_history.pop();
         redo_history.push(revert);
-        if(redo_history.length > max_undo_steps) redo_history.shift();
+        while(redo_history.length > max_undo_steps) redo_history.shift();
 
         for(let i = 0; i < shapes.length; i++) shapes[i].remove();
         shapes = [];
@@ -378,7 +439,7 @@
       {
         let revert = redo_history.pop();
         undo_history.push(revert);
-        if(undo_history.length > max_undo_steps) undo_history.shift();
+        while(undo_history.length > max_undo_steps) console.log(undo_history.shift());
 
         for(let i = 0; i < shapes.length; i++) shapes[i].remove();
         shapes = [];
@@ -415,24 +476,9 @@
     {
       shapes.push(d3.select(elem).clone([true]));
       shapes[shapes.length-1].attr('stroke-width', 0)
-                             .on("contextmenu", function()
-                                   {
-                                    undo_history.push(undoElements());
-                                    let index = selected.indexOf(this);
-                                    if(index == -1)
-                                    {
-                                      selected.push(this);
-                                      d3.select(this).attr('stroke-width', 4)
-                                                     .attr('stroke', "gold");
-                                    }
-                                    else
-                                    {
-                                      selected.splice(index,1);
-                                      d3.select(this).attr('stroke-width', 0);
-                                    }
-                                   })
-                              .attr('id', ''.concat(id_counter));
-                              id_counter++;
+                             .on("contextmenu", contextMenuCalled)
+                             .attr('id', ''.concat(id_counter));
+      id_counter++;
   };
 
   //TODO add this to its own file helperfunctions.js and include in future projects
@@ -457,8 +503,6 @@
   //select/deselect all, called when 'a' is pressed
   function selectAll()
   {
-    undo_history.push(undoElements());
-    if(undo_history.length > max_undo_steps) undo_history.shift();
     let nothingSelected = selected.length == 0;
     //if nothing selected select all
     if(nothingSelected)
@@ -497,7 +541,7 @@
       groupStr = encodeURIComponent(groupStr);
     }
 
-    let svgBegin = "data:image/svg+xml;utf8,%3Csvg%20width%3D%22".concat(width,"%22%20height%3D%22",height,"%22%3E");
+    let svgBegin = "data:image/svg+xml;utf8,%3Csvg%20width%3D%22".concat(width,"%22%20height%3D%22",height,"%22%3E%20id%3D%22",encode(),"%22%20");
     let svgEnd = "%3C%2Fsvg%3E";
     let svgString = svgBegin + groupStr + svgEnd;
     //creating link element but not appending it to document
@@ -728,8 +772,12 @@
 
   function scaleSelected(factorX,factorY)
   {
+    let sel_elem;
     for(let i = 0; i < selected.length; i++){
-      applyScale(d3.select(selected[i]),factorX,factorY);
+      sel_elem = d3.select(selected[i]);
+      applyTranslation(sel_elem);
+      applyRotation(sel_elem);
+      applyScale(sel_elem,factorX,factorY);
     }
     return true;
   };
@@ -841,10 +889,73 @@
   function checkKey(e)
   {
     //we dont want to add to undo history if we're hitting undo
-    if(e.keyCode != 85) undo_history.push(undoElements());
-    else if(undo_history.length > max_undo_steps) undo_history.shift();
+    if((e.keyCode != last_operation || e.keyCode == 13 || e.keyCode == 65) && e.keyCode != 85 && e.keyCode != 82) undo_history.push(undoElements());
+    while(undo_history.length > max_undo_steps) undo_history.shift();
+
+    last_operation = e.keyCode;
 
     console.log(e.keyCode);
+    //top row number keys, create polygon
+    if(e.keyCode > 47 && e.keyCode < 58)
+    {
+      let color;
+
+      switch(e.keyCode){
+        case 49:
+          color = colors[0];
+          break;
+        case 50:
+          color = colors[1];
+          break;
+        case 51:
+          color = colors[2];
+          break;
+        case 52:
+          color = colors[3];
+          break;
+        case 53:
+          color = colors[4];
+          break;
+        case 54:
+          color = colors[5];
+          break;
+        case 55:
+          color = colors[6];
+          break;
+        case 56:
+          color = colors[7];
+          break;
+        case 57:
+          color = colors[8];
+          break;
+        case 58:
+          color = colors[9];
+          break;
+      }
+
+      if(points.length > 2)
+      {
+        let pointsStr = "";
+        pointsStr = pointsStr.concat(points[0][0],",",points[0][1]);
+
+        for(let i = 1; i < points.length; i++)
+        {
+          pointsStr = pointsStr.concat(" ",points[i][0],",",points[i][1]);
+        }
+        
+        shapes.push(main_node.append("polygon")
+                             .attr("points", pointsStr)
+                             .attr("fill", color)
+                             .on("contextmenu", contextMenuCalled)
+                             .attr('id', ''.concat(id_counter)));
+        id_counter++;
+
+        point_elems.forEach(point => point.remove());
+        points = [];
+        point_elems = [];
+      }
+
+    }
     //arrow keys, translate selected
     if(e.keyCode >= 37 && e.keyCode <= 40)
     {
@@ -922,10 +1033,11 @@
       if(e.keyCode == 188) rotateSelected(-2);
       else rotateSelected(2);
     }
-    else if(e.keyCode == 173 || e.keyCode == 61)
+    //scale selected on n and m keys
+    else if(e.keyCode == 78 || e.keyCode == 77)
     {
       //173 is scale down
-      if(e.keyCode == 173) scaleSelected(0.9,0.9);
+      if(e.keyCode == 78) scaleSelected(0.9,0.9);
       //61 is scale up
       else scaleSelected(1.1,1.1);
     }
@@ -933,10 +1045,10 @@
     else if(e.keyCode == 88) scaleSelected(-1,1);
     //mirror on y when y key is pressed
     else if(e.keyCode == 89) scaleSelected(1,-1);
-    //brighten color of selected if ; is pressed
-    else if(e.keyCode == 59) brightenSelected();
-    //brighten color of selected if \ is pressed
-    else if(e.keyCode == 220) darkenSelected();
+    //brighten color of selected if b is pressed
+    else if(e.keyCode == 66) brightenSelected();
+    //brighten color of selected if v is pressed
+    else if(e.keyCode == 86) darkenSelected();
     //raise on ]
     else if(e.keyCode == 221) raiseSelected();
     //lower on [
@@ -962,11 +1074,6 @@
     //redo on 'r'
     else if(e.keyCode == 82) redo();
 
-    if(shapes.length)
-    {
-      //console.log(shapes[0].attr('fill'));
-      //console.log(d3.hsl(shapes[0].attr('fill')));
-    }
   };
   </script>
   
