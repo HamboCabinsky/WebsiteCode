@@ -29,6 +29,10 @@
     <main>
       <div id='d3cont'></div>
       <div id='underbar'></div>
+      <br>
+      <div id='textfields'></div>
+      <br>
+      <div id='text_buttons'></div>
     </main>
 
   </body>
@@ -98,6 +102,31 @@
                        .on("click", share);
 
    if(params.has('data')) decode(params.get('data'));
+
+   let textbox = d3.select('#textfields')
+                   .append('input')
+                   .attr('value', "Load encoded images or retrive output encoded data here.")
+                   .attr('size', width/6)
+                   .attr('class', 'center')
+                   .attr('style', 'font-size: 18px')
+                   .attr('id', 'inputbox');
+
+   let encodeButton = d3.select("#text_buttons")
+                       .attr("text-align","center")
+                       .attr("class","center")
+                       .append("button")
+                       .attr('style', 'outline: none')
+                       .html("ENCODE")
+                       .on("click", () => document.getElementById("inputbox").value = encode());
+
+   let decodeButton = d3.select("#text_buttons")
+                        .attr("text-align","center")
+                        .attr("class","center")
+                        .append("button")
+                        .attr('style', 'outline: none')
+                        .html("DECODE")
+                        .on("click", () => decode(document.getElementById("inputbox").value));
+
 
     //EVENT BINDINGS
     svg.on("click", function(){
@@ -209,6 +238,9 @@
         }
         toEncode = toEncode.slice(toEncode.indexOf("polygon points"));
       }
+      //replace all negative signs with E
+      encodedStr = encodedStr.replaceAll('-', 'E');
+      console.log(encodedStr);
       return encodedStr;
     };
 
@@ -216,7 +248,8 @@
     {
       let enc_shapes = encodedStr.split('A');
       let attributes, points, fill, opacity, pt_str, fill_str, op_str;
-      for(let i = 0; i < enc_shapes.length; i++)
+      let i;
+      for(i = 0; i < enc_shapes.length; i++)
       {
         //split our encoded string into easily parsable arrays
         attributes = enc_shapes[i].split(/[CD]+/);
@@ -227,7 +260,12 @@
 
         //generate strings for our attributes
         pt_str = "";
-        for(let i = 0; i < points.length; i+=2) pt_str += points[i] + "," + points[i+1] + " ";
+        //stop before last x,y pair so we can add it without a space at the end
+        let j;
+        for(j = 0; j < points.length-2; j+=2) pt_str += points[j] + "," + points[j+1] + " ";
+        pt_str += points[j] + "," + points[j+1];
+        //replace all Es with negative signs
+        pt_str = pt_str.replaceAll('E', '-');
         fill_str = "rgb(" + fill[0] + ", " + fill[1] + ", " + fill[2] +")";
 
         if(attributes.length > 2) op_str = "0." + opacity;
@@ -640,10 +678,14 @@
           angle = Math.atan2(dY,dX) - rotation[0]*Math.PI/180;
           newX = parseFloat((rotation[1] + r*Math.cos(angle)).toFixed(4));
           newY = parseFloat((rotation[2] - r*Math.sin(angle)).toFixed(4));
-
-          pt_str = pt_str.concat(newX,",");
-          pt_str = pt_str.concat(newY," ");
+          if(j < pt_list.length-1)
+          {
+            pt_str = pt_str.concat(newX,",");
+            pt_str = pt_str.concat(newY," ");
+          }
         }
+        //append last pt without trailing space
+        pt_str = pt_str.concat(newX,",",newY);
         elem.attr("points", pt_str);   
       }
     }
@@ -677,9 +719,15 @@
     {
       x = (pt_list[j].x-origin[0])*scale[0];
       y = (pt_list[j].y-origin[1])*scale[1];
-      pt_str = pt_str.concat(parseFloat((origin[0]+x).toFixed(4)),",");
-      pt_str = pt_str.concat(parseFloat((origin[1]+y).toFixed(4))," ");
+
+      if(j < pt_list.length-1)
+      {
+        pt_str = pt_str.concat(parseFloat((origin[0]+x).toFixed(4)),",");
+        pt_str = pt_str.concat(parseFloat((origin[1]+y).toFixed(4))," ");
+      }   
     }
+    pt_str = pt_str.concat(parseFloat((origin[0]+x).toFixed(4)),",");
+    pt_str = pt_str.concat(parseFloat((origin[1]+y).toFixed(4)));
     elem.attr("points", pt_str);
   }
 
@@ -692,11 +740,15 @@
 
     let pt_str = "";
 
-    for(let j = 0; j < pt_list.length; j++)
+    let j;
+    for(j = 0; j < pt_list.length-1; j++)
     {
       pt_str = pt_str.concat(pt_list[j].x+t[0],",");
       pt_str = pt_str.concat(pt_list[j].y+t[1]," ");
-    }   
+    }
+    //add last pt without trailing space
+    pt_str = pt_str.concat(pt_list[j].x+t[0],",");
+    pt_str = pt_str.concat(pt_list[j].y+t[1]);
 
     elem.attr("points", pt_str);
     let new_transform = elem.attr("transform").split(/\s+/);
@@ -886,6 +938,110 @@
     }
   };
 
+  //toggles continuous hue shifting animation
+  function animateHue()
+  {
+    let sel;
+    for(elem of selected)
+    {
+      sel = d3.select(elem);
+      if(sel.select('#hueAnim').empty())
+      {
+        let colorStart = d3.rgb(sel.attr('fill')).toString();
+        let colorMid = d3.hsl(colorStart);
+        colorMid.h += 128;
+        colorMid = d3.rgb(colorMid).toString();
+        let colorEnd = d3.hsl(colorMid);
+        colorEnd.h += 128;
+        colorEnd = d3.rgb(colorEnd).toString();
+
+        sel.append("animate")
+           .attr("attributeName", "fill")
+           .attr("values", colorStart+';'+colorMid+';'+colorEnd+';'+colorStart)
+           .attr("dur", "4s")
+           .attr("repeatCount", "indefinite")
+           .attr("id", "hueAnim");
+        
+      }
+      else sel.select('#hueAnim').remove();
+    }
+  };
+
+  //toggles continuous brightening and return back to original color of selected fills
+  function animateFlash()
+  {
+    let sel;
+    for(elem of selected)
+    {
+      sel = d3.select(elem);
+      if(sel.select('#flashAnim').empty())
+      {
+        let colorStart = d3.rgb(d3.hsl(sel.attr('fill')).darker(0.8)).toString();
+        let colorEnd = d3.hsl(colorStart).brighter(1.6);
+        colorEnd = d3.rgb(colorEnd).toString();
+
+        sel.append("animate")
+           .attr("attributeName", "fill")
+           .attr("values", colorStart+';'+colorEnd+';'+colorStart)
+           .attr("dur", "2s")
+           .attr("repeatCount", "indefinite")
+           .attr("id", "flashAnim");
+        
+      }
+      else sel.select('#flashAnim').remove();
+    }
+  };
+
+  //animates rotating selected elements around center of selection
+  function animateRotate()
+  {
+    let sel;
+    for(elem of selected)
+    {
+      sel = d3.select(elem);
+      if(sel.select('#rotateAnim').empty())
+      {
+        let xSum = 0;
+        let ySum = 0;
+        let num_values = 0;
+        let sel_elem = null;
+        let pt_list = null;
+        let translation;
+
+        for(let i = 0; i < selected.length; i++)
+        {
+          sel_elem = d3.select(selected[i]);
+          
+          applyTranslation(sel_elem);
+          applyRotation(sel_elem);
+
+          pt_list = sel_elem._groups[0][0].points;
+
+          for(let j = 0; j < pt_list.length; j++)
+          {
+            xSum += sel_elem._groups[0][0].points[j].x;
+            ySum += sel_elem._groups[0][0].points[j].y;
+            num_values++;
+          }   
+        }
+
+        let origin = "".concat(parseFloat((xSum/num_values).toFixed(4))," ",parseFloat((ySum/num_values).toFixed(4)));
+
+        sel.append("animateTransform")
+           .attr("attributeName", "transform")
+           .attr("attributeType", "XML")
+           .attr("type", "rotate")
+           .attr("from", "0 " + origin)
+           .attr("to", "360 " + origin)
+           .attr("dur", "12s")
+           .attr("repeatCount", "indefinite")
+           .attr("id", "rotateAnim");
+        
+      }
+      else sel.select('#rotateAnim').remove();
+    }
+  };
+
   function checkKey(e)
   {
     //we dont want to add to undo history if we're hitting undo
@@ -1016,13 +1172,13 @@
         d3.select(selected[i]).attr("transform", d3.select(selected[i]).attr("transform").split(/\s+/).join(' '));
       }
     }
-    //if enter key is pressed, duplicate selected
-    else if(e.keyCode == 13)
+    //if d key is pressed, duplicate selected
+    else if(e.keyCode == 68)
     {
       selected.forEach(elem => cloneElem(elem));
     }
-    //if backspace pressed, delete selected
-    else if (e.keyCode == 8)
+    //if q pressed, delete selected
+    else if (e.keyCode == 81)
     {
       selected.forEach(elem => removeElem(elem));
       selected = [];
@@ -1053,14 +1209,20 @@
     else if(e.keyCode == 221) raiseSelected();
     //lower on [
     else if(e.keyCode == 219) lowerSelected();
-    //select/deselect all on 'a'
-    else if(e.keyCode == 65) selectAll();
+    //select/deselect all on 's'
+    else if(e.keyCode == 83) selectAll();
     //lower opacity on 'o'
     else if(e.keyCode == 79) lowerOpacity();
     //raise opacity on 'p'
     else if(e.keyCode == 80) raiseOpacity();
     //shift hue on ~
     else if(e.keyCode == 192) hueShiftRight();
+    //toggle continuous hue animation on h
+    else if(e.keyCode == 72) animateHue();
+    //toggle continuous flash animation on f
+    else if(e.keyCode == 70) animateFlash();
+    //toggle continuous rotate animation on g
+    else if(e.keyCode == 71) animateRotate();
     //lower saturation on numpad -
     else if(e.keyCode == 109) adjustSaturation(0.9);
     //raise saturation on numpad +
