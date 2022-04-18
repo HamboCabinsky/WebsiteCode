@@ -27,19 +27,33 @@
       </section>
       <br>
     <main>
+      
       <div id='d3cont'></div>
       <div id='underbar'></div>
       <br>
       <div id='textfields'></div>
       <br>
       <div id='text_buttons'></div>
+      
+      <form id="upload">
+      <label for="file">Background image to upload</label>
+      <input type="file" id="file" accept="image/*">
+      <button>Upload</button>
+      </form>
+      
     </main>
 
   </body>
 
-<script>
+  <footer>
+  <div id="footer">
+    Copyright 2022 Christian Bonin
+  </div>
+  </footer>
+  <script>
     let screen_width  = screen.width;
     let width, height;
+    let c, x_y;
 
     let params = new URLSearchParams(window.location.search);
     if(params.has('width') && params.has('height'))
@@ -61,9 +75,12 @@
     let selected = [];
     let undo_history = [];
     let redo_history = [];
+    let moused_over;
     let max_undo_steps = 40;
     let id_counter = 0;
     let last_operation = 0;
+    let form = document.querySelector('#upload');
+    let file = document.querySelector('#file');
 
     //APPENDING ELEMENTS TO DOCUMENT
     let svg = d3.select("#d3cont")
@@ -71,7 +88,8 @@
                 .attr("width", width)
                 .attr("height", height)
                 //center svg on page
-                .attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
+                //.attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
+                .attr("style", "position: absolute; left: ".concat(Math.floor(screen_width/2-width/2),"px;"));
 
     let border_n_grid = svg.append("g");
     let main_node = svg.append("g");
@@ -85,21 +103,24 @@
                          .attr("class","center")
                          .append("button")
                          .html("EXPORT SVG")
-                         .on("click", exportSVG);
+                         .on("click", exportSVG)
+                         .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
 
    let bgImgButton = d3.select("#underbar")
                        .attr("text-align","center")
                        .attr("class","center")
                        .append("button")
                        .html("LINK REF IMG")
-                       .on("click", addbgRef);
+                       .on("click", addbgRef)
+                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
 
    let shareButton = d3.select("#underbar")
                        .attr("text-align","center")
                        .attr("class","center")
                        .append("button")
                        .html("SHARE")
-                       .on("click", share);
+                       .on("click", share)
+                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
 
    if(params.has('data')) decode(params.get('data'));
 
@@ -109,7 +130,8 @@
                    .attr('size', width/6)
                    .attr('class', 'center')
                    .attr('style', 'font-size: 18px')
-                   .attr('id', 'inputbox');
+                   .attr('id', 'inputbox')
+                   .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
 
    let encodeButton = d3.select("#text_buttons")
                        .attr("text-align","center")
@@ -117,7 +139,8 @@
                        .append("button")
                        .attr('style', 'outline: none')
                        .html("ENCODE")
-                       .on("click", () => document.getElementById("inputbox").value = encode());
+                       .on("click", () => document.getElementById("inputbox").value = encode())
+                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
 
    let decodeButton = d3.select("#text_buttons")
                         .attr("text-align","center")
@@ -125,7 +148,12 @@
                         .append("button")
                         .attr('style', 'outline: none')
                         .html("DECODE")
-                        .on("click", () => decode(document.getElementById("inputbox").value));
+                        .on("click", () => decode(document.getElementById("inputbox").value))
+                        .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
+
+   d3.select('#upload').attr('style', 'transform: translate(0,'.concat(height*1.08,'px'))
+                       .attr('class', 'center');
+
 
 
     //EVENT BINDINGS
@@ -157,16 +185,19 @@
               d3.event.preventDefault();
         });
 
+    svg.on('mousemove', function(){x_y = d3.mouse(this);});
+
     function contextMenuCalled()
     {
       last_right_click = d3.mouse(this);
+      console.log(last_right_click);
       //avoid accidental double clicks
       let click_to_op = parseInt("".concat(last_right_click[0],last_right_click[1]))*-1;
       if(last_operation == click_to_op) return;
       last_operation = click_to_op;
       
       undo_history.push(undoElements());
-      while(undo_history.length > max_undo_steps) console.log(undo_history.shift());
+      while(undo_history.length > max_undo_steps) undo_history.shift();
       let index = selected.indexOf(this);
 
       if(index == -1)
@@ -183,6 +214,20 @@
     };
 
     document.onkeydown = checkKey;
+
+    function handleSubmit(event)
+    {
+      //stop page from reloading
+      event.preventDefault();
+      if(!file.value.length) return;
+      let reader = new FileReader();
+      reader.onload = function(event){
+        addbgRef(event.target.result);
+      }
+      reader.readAsDataURL(file.files[0]);
+    }
+
+    form.addEventListener('submit', handleSubmit);
 
     //encode entire svg into a hex str
     function encode()
@@ -275,7 +320,11 @@
                                .attr("points", pt_str)
                                .attr("fill", fill_str)
                                .on("contextmenu", contextMenuCalled)
+                               .on("mouseover", function(){moused_over = this;})
+                               .on("mouseleave", function(){if(moused_over == this) moused_over = null;})
                                .attr('id', ''.concat(id_counter)));
+
+                               
         id_counter++;
 
         //if we have an opacity, apply it
@@ -371,14 +420,16 @@
       border_n_grid.selectAll('.alpha').remove();
     };
 
-    function addbgRef()
+    function addbgRef(src = null)
     {
       if(d3.select('canvas')._groups[0][0] != null) d3.select('canvas').remove();
-      let fileName = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
+      let fileName;
+      if(src == null) fileName = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
+      else fileName = src;
       removeGrid();
-      let c = d3.select('#d3cont').append('canvas').attr('width',width/1.16).attr('height',height/1.16);
+      c = d3.select('#d3cont').append('canvas').attr('width',width).attr('height',height);
       document.getElementsByTagName('CANVAS')[0].style.position = 'absolute';
-      document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/1.96-width/2),'px');
+      document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/2-width/2),'px');
       let ctx = c.node().getContext('2d');
       let img = new Image();
       img.src = fileName;
@@ -393,9 +444,9 @@
         paintHeight = height;
         paintWidth = width*aspect;
       }
-
+      //img.crossOrigin = '';
       img.onload = () => ctx.drawImage(img,0,0,paintWidth,paintHeight);
-      d3.select('canvas').lower();
+      c.lower();
     };
 
     function remakeShape(attributes)
@@ -403,10 +454,13 @@
       let name = attributes[0];
       let new_shape = main_node.append(name)
                                .on("contextmenu", contextMenuCalled);
+                               
 
       for(let i = 1; i < attributes.length; i+=2) new_shape.attr(attributes[i], 
                                                                  attributes[i+1]);
-      
+
+      new_shape.on("mouseover", function(){moused_over = this});
+      new_shape.on("mouseleave", function(){if(moused_over == this) moused_over = null;})
       return new_shape;
     };
 
@@ -515,7 +569,9 @@
       shapes.push(d3.select(elem).clone([true]));
       shapes[shapes.length-1].attr('stroke-width', 0)
                              .on("contextmenu", contextMenuCalled)
-                             .attr('id', ''.concat(id_counter));
+                             .attr('id', ''.concat(id_counter))
+                             .on("mouseover", function(){moused_over = this})
+                             .on("mouseleave", function(){if(moused_over == this) moused_over = null;});
       id_counter++;
   };
 
@@ -1042,6 +1098,33 @@
     }
   };
 
+  function copyColor()
+  {
+    if(moused_over != null)
+    {
+      let sel_elem;
+      for(sel of selected)
+      {
+        sel_elem = d3.select(sel);
+        sel_elem.attr('fill', d3.select(moused_over).attr('fill'));
+      }
+    }
+    else if(c != null)
+    {
+      let ctx = c._groups[0][0].getContext('2d');
+      let data = ctx.getImageData(x_y[0], x_y[1], 1, 1).data;
+      console.log(data);
+      let new_color = "rgb(".concat(data[0],",",data[1],',',data[2],")");
+      console.log(new_color);
+      let sel_elem;
+      for(sel of selected)
+      {
+        sel_elem = d3.select(sel);
+        sel_elem.attr('fill', new_color);
+      }
+    }
+  };
+
   function checkKey(e)
   {
     //we dont want to add to undo history if we're hitting undo
@@ -1051,6 +1134,8 @@
     last_operation = e.keyCode;
 
     console.log(e.keyCode);
+    console.log(x_y);
+
     //top row number keys, create polygon
     if(e.keyCode > 47 && e.keyCode < 58)
     {
@@ -1102,8 +1187,14 @@
         shapes.push(main_node.append("polygon")
                              .attr("points", pointsStr)
                              .attr("fill", color)
+                             .on("mouseover", function(){moused_over = this})
+                             .on("mouseleave", function(){if(moused_over == this) moused_over = null;})
                              .on("contextmenu", contextMenuCalled)
                              .attr('id', ''.concat(id_counter)));
+
+        console.log(shapes[shapes.length-1]);
+        
+                             
         id_counter++;
 
         point_elems.forEach(point => point.remove());
@@ -1235,14 +1326,12 @@
     else if(e.keyCode == 85) undo();
     //redo on 'r'
     else if(e.keyCode == 82) redo();
+    //copy colors from other polygons or background image when c is pressed
+    else if(e.keyCode == 67) copyColor();
 
   };
-  </script>
   
-  <footer>
-  <div class="center">
-    Copyright 2022 Christian Bonin
-  </div>
-  </footer>
+  d3.select('#footer').attr("style","transform: translate(0,".concat(height*1.2,")"));
+  </script>
 
 </html>
