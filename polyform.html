@@ -53,9 +53,11 @@
         <p>'~' key will adjust the hue of selected polygons, 'v' and 'b' keys adjust brightness, numpad +- adjusts saturation (numpad *. to fully saturate or desat)</p>
         <p>Animations: 'f' key to toggle flash, 'g' toggles rotate, 'h' toggles hue cycling</p>
         <p>Press 'u' to undo last action, 'r' to redo last undo</p>
+        <p>Press 'i' to hide all selected polygons or to unhide all hidden polygons if nothing is selected</p>
         <p>Click ENCODE to generate an encoded data string that can be used to reload the image in the editor, it will be output in the text area above the button<p>
         <p>Enter the encoded string into the same text area and click DECODE to load an image from its encoded string<p>
         <p>If you export the SVG as a file via the EXPORT SVG button, the encoded string can still be retreived by opening the svg in notepad or another text editor</p>
+        <p>Edit speed controls how dramatic your changes are when you transform/recolor a polygon. Highlight width adjusts how big selected objects outlines are</p>
       </div>
       <footer>
       <div id="footer">
@@ -69,26 +71,18 @@
   
 <script>
     /*TODO stop using css transform property for anything on the polygons aside from animations
-      Configurable edit speed from editor
-      Have shapes array reflect the layer of objects on DOM so undos and other operations don't mess with layers
-      Anytime you raise a polygon raise any points on canvas so they stay on top
-      See if not rounding anything except on export solves scaling down 'coming apart' issue
-      Adjust stroke width of select highlight depending on size of object
-      After fixing layering issue check if undo redo is behaving as expected
+      'coming apart' issue
       Look into css transforms and see if the source code is public
-      Add button to remove background image and bring back alpha grid
       Make button for adding background color
       Add animations to export encoded string
       Add new grow/shrink
-      Add toggle hide on selected
-      Cap opacity at 1
-      Figure out why sometimes clicks arent registering
       Implement joining, unjoining
-      On decode, have everything being added be selected by default
     */
     let screen_width  = screen.width;
     let width, height;
     let c, x_y;
+    let edit_sp = 4;
+    let stroke_width = 4;
 
     let params = new URLSearchParams(window.location.search);
     if(params.has('width') && params.has('height'))
@@ -108,6 +102,7 @@
     let points = [];
     let point_elems = [];
     let selected = [];
+    let hidden = [];
     let undo_history = [];
     let redo_history = [];
     let moused_over;
@@ -118,7 +113,7 @@
     let file = document.querySelector('#file');
     let img_pos = Math.floor(screen_width/2-width/2);
 
-    d3.select('#instructions').attr('style', "position: absolute; top: 400px; height:1400px; width:".concat(img_pos-200, "px; border:1px solid #600; font:16px overflow:auto; background-color:#DDD; padding:5px;"));
+    d3.select('#instructions').attr('style', "position: absolute; top: 300px; height:1400px; width:".concat(img_pos-img_pos/3.6, "px; border:1px solid #600; font:16px overflow:auto; background-color:#DDD; padding:5px;"));
 
     //APPENDING ELEMENTS TO DOCUMENT
     let svg = d3.select("#d3cont")
@@ -126,7 +121,6 @@
                 .attr("width", width)
                 .attr("height", height)
                 //center svg on page
-                //.attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
                 .attr("style", "position: absolute; left: ".concat(img_pos,"px;"));
 
     let border_n_grid = svg.append("g");
@@ -136,61 +130,92 @@
     //paint background grid
     paintAlphaGrid(width,height);
     
-    let exportButton = d3.select("#underbar")
-                         .attr("text-align","center")
-                         .attr("class","center")
-                         .append("button")
-                         .html("EXPORT SVG")
-                         .on("click", exportSVG)
-                         .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
+    //exportSVG button
+    d3.select("#underbar")
+       .attr('style', 'transform: translate(0,'.concat(height+30,'px','); position: absolute; left: '.concat(img_pos,'px;')))
+       .append("button")
+       .html("EXPORT SVG")
+       .on("click", exportSVG);
+                         
+    //add background reference image button
+    d3.select("#underbar")
+       .append("button")
+       .html("LINK REF IMG")
+       .on("click", () => {let src = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
+                           addbgRef(src);});
 
-   let bgImgButton = d3.select("#underbar")
-                       .attr("text-align","center")
-                       .attr("class","center")
-                       .append("button")
-                       .html("LINK REF IMG")
-                       .on("click", addbgRef)
-                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
+    //share button
+    d3.select("#underbar")
+      .append("button")
+      .html("SHARE")
+      .on("click", share);
 
-   let shareButton = d3.select("#underbar")
-                       .attr("text-align","center")
-                       .attr("class","center")
-                       .append("button")
-                       .html("SHARE")
-                       .on("click", share)
-                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
+    //encode button
+    d3.select("#underbar")
+      .attr("text-align","center")
+      .attr("class","center")
+      .append("button")
+      .html("ENCODE")
+      .on("click", () => document.getElementById("inputbox").value = encode());
+
+    //decode button
+    d3.select("#underbar")
+      .attr("text-align","center")
+      .attr("class","center")
+      .append("button")
+      .html("DECODE")
+      .on("click", () => decode(document.getElementById("inputbox").value));
+
+    //remove reference image button
+    d3.select("#underbar")
+      .attr("text-align","center")
+      .attr("class","center")
+      .append("button")
+      .html("Remove BG")
+      .on("click", () => addbgRef(null));
+
+   let edit_sp_form = d3.select("#underbar")
+                        .append("form")
+                        .attr('style', 'transform: translate(505px,-20px);');
+
+   edit_sp_form.append("label")
+               .attr("for", "edit_sp")
+               .html('Edit Speed:');
+
+   edit_sp_dropdown = edit_sp_form.append("select")
+                                  .attr("id", "edit_sp");
+
+   edit_sp_dropdown.append("option").html("0.5").on("click", () => edit_sp = 0.5);
+   edit_sp_dropdown.append("option").html("1").on("click", () => edit_sp = 1);
+   edit_sp_dropdown.append("option").html("2").on("click", () => edit_sp = 2);
+   edit_sp_dropdown.append("option").attr('selected',true).html("4").on("click", () => edit_sp = 4);
+   edit_sp_dropdown.append("option").html("8").on("click", () => edit_sp = 8);
+   edit_sp_dropdown.append("option").html("16").on("click", () => edit_sp = 16);
+
+   edit_sp_form.append("label")
+               .attr("for", "highlight_width")
+               .html('highlight width:')
+               .attr('style', 'padding: 5px;');
+
+   highlight_dropdown = edit_sp_form.append("select")
+                                    .attr("id", "highlight_width");
+
+   highlight_dropdown.append("option").html("0.5").on("click", () => changeStrokeWidth(0.5));
+   highlight_dropdown.append("option").html("1").on("click", () => changeStrokeWidth(1));
+   highlight_dropdown.append("option").html("2").on("click", () => changeStrokeWidth(2));
+   highlight_dropdown.append("option").attr('selected',true).html("4").on("click", () => changeStrokeWidth(4));
 
    if(params.has('data')) decode(params.get('data'));
 
    let textbox = d3.select('#textfields')
+                   .attr('style', 'transform: translate(0,'.concat(height+50,'px','); position: absolute; left: '.concat(img_pos,'px;')))
                    .append('input')
                    .attr('value', "Load encoded images or retrive output encoded data here.")
                    .attr('size', width/6)
-                   .attr('class', 'center')
                    .attr('style', 'font-size: 18px')
-                   .attr('id', 'inputbox')
-                   .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
+                   .attr('id', 'inputbox');
 
-   let encodeButton = d3.select("#text_buttons")
-                       .attr("text-align","center")
-                       .attr("class","center")
-                       .append("button")
-                       .attr('style', 'outline: none')
-                       .html("ENCODE")
-                       .on("click", () => document.getElementById("inputbox").value = encode())
-                       .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
-
-   let decodeButton = d3.select("#text_buttons")
-                        .attr("text-align","center")
-                        .attr("class","center")
-                        .append("button")
-                        .attr('style', 'outline: none')
-                        .html("DECODE")
-                        .on("click", () => decode(document.getElementById("inputbox").value))
-                        .attr('style', 'transform: translate(0,'.concat(height*1.06,'px'));
-
-   d3.select('#upload').attr('style', 'transform: translate(0,'.concat(height*1.08,'px'))
-                       .attr('class', 'center');
+   d3.select('#upload').attr('style', 'transform: translate(0,'.concat(height+70,'px','); position: absolute; left: '.concat(img_pos,'px;')));
 
 
 
@@ -201,7 +226,7 @@
       //avoid accidental double clicks
       if(last_click)
       {
-        let click_to_op = parseInt("".concat(last_click[0],last_click[1]))*-1+0.5;
+        let click_to_op = parseInt("".concat(Math.floor(last_click[0]),Math.floor(last_click[1])))*-1+0.5;
         if(last_operation == click_to_op) return;
         last_operation = click_to_op;
       } 
@@ -225,10 +250,15 @@
 
     svg.on('mousemove', function(){x_y = d3.mouse(this);});
 
+    function changeStrokeWidth(new_width)
+    {
+      for(sel of selected) d3.select(sel).attr('stroke-width', new_width);
+      stroke_width = new_width;
+    };
+
     function contextMenuCalled()
     {
       last_right_click = d3.mouse(this);
-      console.log(last_right_click);
       //avoid accidental double clicks
       let click_to_op = parseInt("".concat(last_right_click[0],last_right_click[1]))*-1;
       if(last_operation == click_to_op) return;
@@ -241,7 +271,7 @@
       if(index == -1)
       {
         selected.push(this);
-        d3.select(this).attr('stroke-width', 4)
+        d3.select(this).attr('stroke-width', stroke_width)
                        .attr('stroke', "gold");
       }
       else
@@ -260,6 +290,11 @@
       if(!file.value.length) return;
       let reader = new FileReader();
       reader.onload = function(event){
+        addbgRef(event.target.result);
+        addbgRef(event.target.result);
+        addbgRef(event.target.result);
+        addbgRef(event.target.result);
+        addbgRef(event.target.result);
         addbgRef(event.target.result);
       }
       reader.readAsDataURL(file.files[0]);
@@ -323,7 +358,6 @@
       }
       //replace all negative signs with E
       encodedStr = encodedStr.replaceAll('-', 'E');
-      console.log(encodedStr);
       return encodedStr;
     };
 
@@ -357,11 +391,13 @@
         shapes.push(main_node.append("polygon")
                                .attr("points", pt_str)
                                .attr("fill", fill_str)
+                               .attr('stroke-width', stroke_width)
+                               .attr('stroke', 'gold')
                                .on("contextmenu", contextMenuCalled)
                                .on("mouseover", function(){moused_over = this;})
                                .on("mouseleave", function(){if(moused_over == this) moused_over = null;})
                                .attr('id', ''.concat(id_counter)));
-
+        selected.push(shapes[shapes.length-1].node());
                                
         id_counter++;
 
@@ -380,7 +416,6 @@
         alert(shareStr);
       }
       else alert("URL too large to share, try saving the SVG via EXPORT button and share the file another way");
-      console.log(shareStr);
     };
 
     function paintAlphaGrid(width, height)
@@ -461,10 +496,14 @@
     function addbgRef(src = null)
     {
       if(d3.select('canvas')._groups[0][0] != null) d3.select('canvas').remove();
-      let fileName;
-      if(src == null) fileName = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
-      else fileName = src;
-      removeGrid();
+      let fileName = src;
+
+      if(fileName == null)
+      {
+        paintAlphaGrid(width,height);
+        return;
+      } else removeGrid();
+
       c = d3.select('#d3cont').append('canvas').attr('width',width).attr('height',height);
       document.getElementsByTagName('CANVAS')[0].style.position = 'absolute';
       document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/2-width/2),'px');
@@ -485,6 +524,7 @@
       //img.crossOrigin = '';
       img.onload = () => ctx.drawImage(img,0,0,paintWidth,paintHeight);
       c.lower();
+      return img;
     };
 
     function remakeShape(attributes)
@@ -516,7 +556,7 @@
         {
           attributes.push(shape.attributes[i].name);
           attributes.push(shape.attributes[i].value);
-          if(shape.attributes[i].name == 'stroke-width' && shape.attributes[i].value == "4")
+          if(shape.attributes[i].name == 'stroke-width' && shape.attributes[i].value != "0")
             undo_elems[1].push(shapes[j].attr('id'));
         }
         undo_elems[0].push(attributes);
@@ -529,7 +569,7 @@
       if(undo_history.length)
       {
         let revert = undo_history.pop();
-        redo_history.push(revert);
+        redo_history.push(undoElements());
         while(redo_history.length > max_undo_steps) redo_history.shift();
 
         for(let i = 0; i < shapes.length; i++) shapes[i].remove();
@@ -555,7 +595,7 @@
         selected = [];
 
         for(let i = 0; i < revert[1].length; i++)
-          for(let j = i; j < shapes.length; j++)
+          for(let j = 0; j < shapes.length; j++)
             if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j]._groups[0][0]);
 
         return true;
@@ -568,8 +608,8 @@
       if(redo_history.length)
       {
         let revert = redo_history.pop();
-        undo_history.push(revert);
-        while(undo_history.length > max_undo_steps) console.log(undo_history.shift());
+        undo_history.push(undoElements());
+        while(undo_history.length > max_undo_steps) undo_history.shift();
 
         for(let i = 0; i < shapes.length; i++) shapes[i].remove();
         shapes = [];
@@ -594,7 +634,7 @@
         selected = [];
 
         for(let i = 0; i < revert[1].length; i++)
-          for(let j = i; j < shapes.length; j++)
+          for(let j = 0; j < shapes.length; j++)
             if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j]._groups[0][0]);
 
         return true;
@@ -642,7 +682,7 @@
       for(let i = 0; i < shapes.length; i++)
       {
         selected.push(shapes[i]._groups[0][0]);
-        shapes[i].attr('stroke-width', 4)
+        shapes[i].attr('stroke-width', stroke_width)
                  .attr('stroke', "gold");
       }
     }
@@ -657,8 +697,21 @@
     }
   };
 
+  function integerizePoints()
+  {
+    let pt_list, pt_str;
+    for(shape of shapes)
+    {
+      pt_list = shape._groups[0][0].points;
+      pt_str = "".concat(Math.floor(pt_list[0].x), ",", Math.floor(pt_list[0].y));
+      for(let i = 1; i < pt_list.length; i++) pt_str = pt_str.concat(" ", Math.floor(pt_list[i].x), ",", Math.floor(pt_list[i].y));
+      shape.attr('points', pt_str);
+    }
+  };
+
   function exportSVG()
   {
+    integerizePoints();
     if(selected.length != 0) selectAll();
     let toExport = main_node.node();
     let groupStr;
@@ -721,8 +774,8 @@
     let tslStrStart = transform_str.indexOf("(", translateStrInd)+1;
     let tslStrY = transform_str.indexOf(",", tslStrStart)+1;
     let tslStrEnd = transform_str.indexOf(")", tslStrY);
-    translate[0] = parseInt(transform_str.substring(tslStrStart,tslStrY-1));
-    translate[1] = parseInt(transform_str.substring(tslStrY,tslStrEnd));
+    translate[0] = parseFloat(transform_str.substring(tslStrStart,tslStrY-1));
+    translate[1] = parseFloat(transform_str.substring(tslStrY,tslStrEnd));
 
     return translate;
   }
@@ -741,11 +794,11 @@
     let rotStrEnd = string.indexOf(")", rotStrStart);
 
     //degrees
-    rotation[0] = parseInt(string.substring(rotStrStart,rotStrX-1));
+    rotation[0] = parseFloat(string.substring(rotStrStart,rotStrX-1));
     let rotStrY = string.indexOf(",", rotStrX)+1;
     //x,y value to rotate around
-    rotation[1] = parseInt(string.substring(rotStrX,rotStrY-1));
-    rotation[2] = parseInt(string.substring(rotStrY,rotStrEnd));
+    rotation[1] = parseFloat(string.substring(rotStrX,rotStrY-1));
+    rotation[2] = parseFloat(string.substring(rotStrY,rotStrEnd));
 
     return rotation;
   };
@@ -770,8 +823,8 @@
           dY = rotation[2] - pt_list[j].y;
           r = Math.sqrt(dX**2 + dY**2);
           angle = Math.atan2(dY,dX) - rotation[0]*Math.PI/180;
-          newX = parseFloat((rotation[1] + r*Math.cos(angle)).toFixed(4));
-          newY = parseFloat((rotation[2] - r*Math.sin(angle)).toFixed(4));
+          newX = rotation[1] + r*Math.cos(angle);
+          newY = rotation[2] - r*Math.sin(angle);
           if(j < pt_list.length-1)
           {
             pt_str = pt_str.concat(newX,",");
@@ -805,7 +858,7 @@
       }
     }
     
-    let origin = [parseFloat((xSum/num_values).toFixed(4)), parseFloat((ySum/num_values).toFixed(4))];
+    let origin = [xSum/num_values, ySum/num_values];
     let x,y;
     pt_str = "";
     pt_list = elem._groups[0][0].points;
@@ -816,12 +869,12 @@
 
       if(j < pt_list.length-1)
       {
-        pt_str = pt_str.concat(parseFloat((origin[0]+x).toFixed(4)),",");
-        pt_str = pt_str.concat(parseFloat((origin[1]+y).toFixed(4))," ");
+        pt_str = pt_str.concat(origin[0]+x,",");
+        pt_str = pt_str.concat(origin[1]+y," ");
       }   
     }
-    pt_str = pt_str.concat(parseFloat((origin[0]+x).toFixed(4)),",");
-    pt_str = pt_str.concat(parseFloat((origin[1]+y).toFixed(4)));
+    pt_str = pt_str.concat(origin[0]+x,",");
+    pt_str = pt_str.concat(origin[1]+y);
     elem.attr("points", pt_str);
   }
 
@@ -879,7 +932,7 @@
       }   
     }
 
-    let origin = [parseFloat((xSum/num_values).toFixed(4)), parseFloat((ySum/num_values).toFixed(4))];
+    let origin = [xSum/num_values, ySum/num_values];
 
     for(let i = 0; i < selected.length; i++)
     {
@@ -931,7 +984,7 @@
   function darkenSelected()
   {
     for(let i = 0; i < selected.length; i++){
-      d3.select(selected[i]).attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).darker(0.1));
+      d3.select(selected[i]).attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).darker(edit_sp/40));
     }
     return true;
   };
@@ -949,10 +1002,9 @@
         let new_color = d3.hsl('black');
         new_color.s = 0;
         new_color.l = 0.1;
-        //console.log(new_color);
         sel_elem.attr('fill', new_color);
       }
-      sel_elem.attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).brighter(0.1));
+      sel_elem.attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).brighter(edit_sp/40));
     }
 
     return true;
@@ -978,6 +1030,15 @@
     for(let i = 0; i < selected.length; i++)
     {
       d3.select(selected[i]).raise();
+      for(let j = 0; j < shapes.length; j++)
+      {
+        if(shapes[j].node().id == selected[i].id)
+        {
+          shapes.push(shapes.splice(j,1)[0]);
+          break;
+        }    
+      }
+      for(elem of point_elems) elem.raise(); 
     }
   };
 
@@ -986,6 +1047,36 @@
     for(let i = 0; i < selected.length; i++)
     {
       d3.select(selected[i]).lower();
+      for(let j = 0; j < shapes.length; j++)
+      {
+        if(shapes[j].node().id == selected[i].id) 
+        {
+          shapes.unshift(shapes.splice(j,1)[0]);
+          break;
+        }      
+      } 
+    }
+  };
+
+  function hideSelected()
+  {
+    if(selected.length)
+    {
+      for(sel of selected)
+      {
+        d3.select(sel).attr('stroke-width', 0);
+        sel.style = 'visibility: hidden;';
+        hidden.push(sel);
+      }
+      selected = [];
+    }
+    else if(hidden.length)
+    {
+      for(shape of hidden)
+      {
+        shape.style = 'visibility: visible;';
+      }
+      hidden = [];
     }
   };
 
@@ -995,8 +1086,8 @@
     for(let i = 0; i < selected.length; i++)
     {
       sel_elem = d3.select(selected[i]);
-      if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity',0.9);
-      else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*0.9).toFixed(4)));
+      if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity', 1-(edit_sp/40));
+      else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*(1-(edit_sp/40)).toFixed(4))));
     }
   };
 
@@ -1006,12 +1097,12 @@
     for(let i = 0; i < selected.length; i++)
     {
       sel_elem = d3.select(selected[i]);
-      if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity',1.1);
-      else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*1.1).toFixed(4)));
+      if(sel_elem.attr('opacity') == null || sel_elem.attr('opacity') > 1) sel_elem.attr('opacity',1);
+      else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*(1+edit_sp/40).toFixed(4))));
     }
   };
 
-  //increase hue by 3, called when ~ is pressed
+  //increase hue, called when ~ is pressed
   function hueShiftRight()
   {
     let new_color;
@@ -1024,10 +1115,10 @@
       else if(sel_elem.attr('fill') == 'white') new_color = 'rgb(230,255,255)';
       else if(isNaN(new_color.h))
       {
-        new_color.h = 3;
+        new_color.h = edit_sp;
         new_color.s = 0.1;
       }
-      else new_color.h += 3;
+      else new_color.h += edit_sp;
       sel_elem.attr('fill', new_color);
     }
   };
@@ -1119,7 +1210,7 @@
           }   
         }
 
-        let origin = "".concat(parseFloat((xSum/num_values).toFixed(4))," ",parseFloat((ySum/num_values).toFixed(4)));
+        let origin = "".concat(xSum/num_values," ",parseFloat(ySum/num_values));
 
         sel.append("animateTransform")
            .attr("attributeName", "transform")
@@ -1151,9 +1242,7 @@
     {
       let ctx = c._groups[0][0].getContext('2d');
       let data = ctx.getImageData(x_y[0], x_y[1], 1, 1).data;
-      console.log(data);
       let new_color = "rgb(".concat(data[0],",",data[1],',',data[2],")");
-      console.log(new_color);
       let sel_elem;
       for(sel of selected)
       {
@@ -1165,14 +1254,12 @@
 
   function checkKey(e)
   {
+    console.log(e.keyCode);
     //we dont want to add to undo history if we're hitting undo
     if((e.keyCode != last_operation || e.keyCode == 13 || e.keyCode == 65) && e.keyCode != 85 && e.keyCode != 82) undo_history.push(undoElements());
     while(undo_history.length > max_undo_steps) undo_history.shift();
 
     last_operation = e.keyCode;
-
-    console.log(e.keyCode);
-    console.log(x_y);
 
     //top row number keys, create polygon
     if(e.keyCode > 47 && e.keyCode < 58)
@@ -1225,12 +1312,10 @@
         shapes.push(main_node.append("polygon")
                              .attr("points", pointsStr)
                              .attr("fill", color)
-                             .on("mouseover", function(){moused_over = this})
+                             .on("mouseover", function(){moused_over = this;})
                              .on("mouseleave", function(){if(moused_over == this) moused_over = null;})
                              .on("contextmenu", contextMenuCalled)
                              .attr('id', ''.concat(id_counter)));
-
-        console.log(shapes[shapes.length-1]);
         
                              
         id_counter++;
@@ -1250,16 +1335,16 @@
       switch(e.keyCode)
       {
         case 37:
-          toTranslate = [-4,0];
+          toTranslate = [-edit_sp,0];
           break;
         case 38:
-          toTranslate = [0,-4];
+          toTranslate = [0,-edit_sp];
           break;
         case 39:
-          toTranslate = [4,0];
+          toTranslate = [edit_sp,0];
           break;
         case 40:
-          toTranslate = [0,4];
+          toTranslate = [0,edit_sp];
           break;
       }
       
@@ -1315,16 +1400,16 @@
     //if < or > pressed, rotate selected
     else if(e.keyCode == 188 || e.keyCode == 190)
     {
-      if(e.keyCode == 188) rotateSelected(-2);
-      else rotateSelected(2);
+      if(e.keyCode == 188) rotateSelected(-edit_sp/2);
+      else rotateSelected(edit_sp/2);
     }
     //scale selected on n and m keys
     else if(e.keyCode == 78 || e.keyCode == 77)
     {
       //173 is scale down
-      if(e.keyCode == 78) scaleSelected(0.9,0.9);
+      if(e.keyCode == 78) scaleSelected(1-(edit_sp/40),1-(edit_sp/40));
       //61 is scale up
-      else scaleSelected(1.1,1.1);
+      else scaleSelected(1+(edit_sp/40),1+(edit_sp/40));
     }
     //mirror on x when x key is pressed
     else if(e.keyCode == 88) scaleSelected(-1,1);
@@ -1353,9 +1438,9 @@
     //toggle continuous rotate animation on g
     else if(e.keyCode == 71) animateRotate();
     //lower saturation on numpad -
-    else if(e.keyCode == 109) adjustSaturation(0.9);
+    else if(e.keyCode == 109) adjustSaturation(1-(edit_sp/40));
     //raise saturation on numpad +
-    else if(e.keyCode == 107) adjustSaturation(1.1);
+    else if(e.keyCode == 107) adjustSaturation(1+(edit_sp/40));
     //fully saturate if numpad * is pressed
     else if(e.keyCode == 106) adjustSaturation(1,true);
     //fully desat on numpad .
@@ -1366,8 +1451,10 @@
     else if(e.keyCode == 82) redo();
     //copy colors from other polygons or background image when c is pressed
     else if(e.keyCode == 67) copyColor();
-
+    //hides selected elements if there are any, otherwise unhides all hidden
+    else if(e.keyCode == 73) hideSelected();
   };
+
   </script>
 
 </html>
