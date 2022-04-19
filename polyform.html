@@ -40,17 +40,52 @@
       <input type="file" id="file" accept="image/*">
       <button>Upload</button>
       </form>
-      
+      <div id='instructions'>
+        <p style="text-decoration:underline;">Instructions:</p>
+        <p>Click to plot points, press a key 0-9 to create a polygon from the points.</p>
+        <p>Default colors: <br>1:Black 2:White 3:Pink 4:Red 5:Orange 6:Yellow 7:Green 8:Cyan 9:Blue 0:Purple</p>
+        <p>Right click to select a polygon, selected polygons are highlighted yellow, 's' to select/deselect all, 'q' to remove selected</p>
+        <p>Once selected, polygons can be transformed and recolored in the following ways:</p>
+        <p>Arrow keys to move, &#60; &#62; keys to rotate, 'n' and 'm' keys to scale, 'x' and 'y' to mirror on x and y</p>
+        <p>Raise and lower layer with [] keys, adjust transparency with 'o' and 'p' keys<p>
+        <p>Press 'c' to copy the color your cursor is hovering over (from another shape or from background reference image) to selected polygons</p>
+        <p>Buttons to load a background reference image (from web-link or from file) are located at bottom of app (MAY HAVE TO CLICK UPLOAD TWICE).</p>
+        <p>'~' key will adjust the hue of selected polygons, 'v' and 'b' keys adjust brightness, numpad +- adjusts saturation (numpad *. to fully saturate or desat)</p>
+        <p>Animations: 'f' key to toggle flash, 'g' toggles rotate, 'h' toggles hue cycling</p>
+        <p>Press 'u' to undo last action, 'r' to redo last undo</p>
+        <p>Click ENCODE to generate an encoded data string that can be used to reload the image in the editor, it will be output in the text area above the button<p>
+        <p>Enter the encoded string into the same text area and click DECODE to load an image from its encoded string<p>
+        <p>If you export the SVG as a file via the EXPORT SVG button, the encoded string can still be retreived by opening the svg in notepad or another text editor</p>
+      </div>
+      <footer>
+      <div id="footer">
+        Copyright 2022 Christian Bonin
+      </div>
+    </footer>
     </main>
 
   </body>
 
-  <footer>
-  <div id="footer">
-    Copyright 2022 Christian Bonin
-  </div>
-  </footer>
-  <script>
+  
+<script>
+    /*TODO stop using css transform property for anything on the polygons aside from animations
+      Configurable edit speed from editor
+      Have shapes array reflect the layer of objects on DOM so undos and other operations don't mess with layers
+      Anytime you raise a polygon raise any points on canvas so they stay on top
+      See if not rounding anything except on export solves scaling down 'coming apart' issue
+      Adjust stroke width of select highlight depending on size of object
+      After fixing layering issue check if undo redo is behaving as expected
+      Look into css transforms and see if the source code is public
+      Add button to remove background image and bring back alpha grid
+      Make button for adding background color
+      Add animations to export encoded string
+      Add new grow/shrink
+      Add toggle hide on selected
+      Cap opacity at 1
+      Figure out why sometimes clicks arent registering
+      Implement joining, unjoining
+      On decode, have everything being added be selected by default
+    */
     let screen_width  = screen.width;
     let width, height;
     let c, x_y;
@@ -81,6 +116,9 @@
     let last_operation = 0;
     let form = document.querySelector('#upload');
     let file = document.querySelector('#file');
+    let img_pos = Math.floor(screen_width/2-width/2);
+
+    d3.select('#instructions').attr('style', "position: absolute; top: 400px; height:1400px; width:".concat(img_pos-200, "px; border:1px solid #600; font:16px overflow:auto; background-color:#DDD; padding:5px;"));
 
     //APPENDING ELEMENTS TO DOCUMENT
     let svg = d3.select("#d3cont")
@@ -89,7 +127,7 @@
                 .attr("height", height)
                 //center svg on page
                 //.attr("transform", "translate(".concat(Math.floor(screen_width/2-width/2), ",0)"));
-                .attr("style", "position: absolute; left: ".concat(Math.floor(screen_width/2-width/2),"px;"));
+                .attr("style", "position: absolute; left: ".concat(img_pos,"px;"));
 
     let border_n_grid = svg.append("g");
     let main_node = svg.append("g");
@@ -1330,8 +1368,6 @@
     else if(e.keyCode == 67) copyColor();
 
   };
-  
-  d3.select('#footer').attr("style","transform: translate(0,".concat(height*1.2,")"));
   </script>
 
 </html>
