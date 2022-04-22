@@ -21,9 +21,10 @@
       <br>
       <section class="title-container">
             <h1 id="title">PolyForm</h1>
-            <p class="sub-title">Work in Progress!</p>
-            <p class="sub-title">UPDATE: changed polygon creation keys from letter keys to number keys (0-9)</p>
             <a href="https://www.twitch.tv/hammybonanza">Check out the development process live on twitch</a>
+            <br>
+            <br>
+            <a href="https://www.patreon.com/ChristianBonin">Support me on Patreon!</a>
       </section>
       <br>
     <main>
@@ -61,7 +62,7 @@
       </div>
       <footer>
       <div id="footer">
-        Copyright 2022 Christian Bonin
+        Copyright 2022 Christian Bonin <a href="https://www.patreon.com/bePatron?u=72867978" data-patreon-widget-type="become-patron-button">Become a Patron!</a><script async src="https://c6.patreon.com/becomePatronButton.bundle.js"></script>
       </div>
     </footer>
     </main>
@@ -70,19 +71,18 @@
 
   
 <script>
-    /*TODO stop using css transform property for anything on the polygons aside from animations
-      'coming apart' issue
-      Look into css transforms and see if the source code is public
+    /*TODO
       Make button for adding background color
       Add animations to export encoded string
       Add new grow/shrink
       Implement joining, unjoining
     */
     let screen_width  = screen.width;
-    let width, height;
-    let c, x_y;
+    let width, height, c, ctx, x_y;
+    let img = new Image();
     let edit_sp = 4;
     let stroke_width = 4;
+    let pt_size = 2;
 
     let params = new URLSearchParams(window.location.search);
     if(params.has('width') && params.has('height'))
@@ -129,6 +129,13 @@
 
     //paint background grid
     paintAlphaGrid(width,height);
+
+    //make canvas for background images
+    c = d3.select('#d3cont').append('canvas').attr('width',width).attr('height',height);
+    document.getElementsByTagName('CANVAS')[0].style.position = 'absolute';
+    document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/2-width/2),'px');
+    ctx = c.node().getContext('2d');
+    c.lower();
     
     //exportSVG button
     d3.select("#underbar")
@@ -141,8 +148,9 @@
     d3.select("#underbar")
        .append("button")
        .html("LINK REF IMG")
+       //true indicates its a web image
        .on("click", () => {let src = prompt("Enter path where image is hosted:","http://54.191.145.57/poly_stairs.jpg");
-                           addbgRef(src);});
+                           addbgRef(src, true);});
 
     //share button
     d3.select("#underbar")
@@ -172,17 +180,19 @@
       .attr("class","center")
       .append("button")
       .html("Remove BG")
+      //null bg image will bring back grid
       .on("click", () => addbgRef(null));
 
-   let edit_sp_form = d3.select("#underbar")
+   //contains all of the configurations that can be chosen by user
+   let configs_form = d3.select("#underbar")
                         .append("form")
-                        .attr('style', 'transform: translate(505px,-20px);');
+                        .attr('style', 'transform: translate(490px,-20px);');
 
-   edit_sp_form.append("label")
+   configs_form.append("label")
                .attr("for", "edit_sp")
                .html('Edit Speed:');
 
-   edit_sp_dropdown = edit_sp_form.append("select")
+   edit_sp_dropdown = configs_form.append("select")
                                   .attr("id", "edit_sp");
 
    edit_sp_dropdown.append("option").html("0.5").on("click", () => edit_sp = 0.5);
@@ -192,21 +202,35 @@
    edit_sp_dropdown.append("option").html("8").on("click", () => edit_sp = 8);
    edit_sp_dropdown.append("option").html("16").on("click", () => edit_sp = 16);
 
-   edit_sp_form.append("label")
+   configs_form.append("label")
                .attr("for", "highlight_width")
                .html('highlight width:')
                .attr('style', 'padding: 5px;');
 
-   highlight_dropdown = edit_sp_form.append("select")
+   highlight_dropdown = configs_form.append("select")
                                     .attr("id", "highlight_width");
 
    highlight_dropdown.append("option").html("0.5").on("click", () => changeStrokeWidth(0.5));
    highlight_dropdown.append("option").html("1").on("click", () => changeStrokeWidth(1));
    highlight_dropdown.append("option").html("2").on("click", () => changeStrokeWidth(2));
    highlight_dropdown.append("option").attr('selected',true).html("4").on("click", () => changeStrokeWidth(4));
+   
+   configs_form.append("label")
+               .attr("for", "pt_size")
+               .html('point size:')
+               .attr('style', 'padding: 5px;');
+   
+   pt_size_dropdown = configs_form.append("select")
+                                  .attr("id", "pt_size");
+
+   pt_size_dropdown.append("option").html("0.5").on("click", () => changePtSize(0.5));
+   pt_size_dropdown.append("option").html("1").on("click", () => changePtSize(1));
+   pt_size_dropdown.append("option").attr('selected',true).html("2").on("click", () => changePtSize(2));
+   pt_size_dropdown.append("option").html("4").on("click", () => changePtSize(4));
 
    if(params.has('data')) decode(params.get('data'));
 
+   //textbox for our encodes and decodes
    let textbox = d3.select('#textfields')
                    .attr('style', 'transform: translate(0,'.concat(height+50,'px','); position: absolute; left: '.concat(img_pos,'px;')))
                    .append('input')
@@ -215,47 +239,56 @@
                    .attr('style', 'font-size: 18px')
                    .attr('id', 'inputbox');
 
+   //position our upload bg image from file section
    d3.select('#upload').attr('style', 'transform: translate(0,'.concat(height+70,'px','); position: absolute; left: '.concat(img_pos,'px;')));
 
+   //EVENT BINDINGS
+   svg.on("click", function(){
 
+    last_click = d3.mouse(this);
+    //avoid accidental double clicks
+    if(last_click)
+    {
+      let click_to_op = parseInt("".concat(Math.floor(last_click[0]),Math.floor(last_click[1])))*-1+0.5;
+      if(last_operation == click_to_op) return;
+      last_operation = click_to_op;
+    } 
 
-    //EVENT BINDINGS
-    svg.on("click", function(){
+    undo_history.push(undoElements());
+    
+    point_elems.push(main_node.append("circle")
+                              .attr("cx", last_click[0])
+                              .attr("cy", last_click[1])
+                              .attr("r", pt_size)
+                              .attr("fill", "black")
+                              .attr("stroke-width", 1)
+                              .attr("stroke", "white"));
 
-      last_click = d3.mouse(this);
-      //avoid accidental double clicks
-      if(last_click)
-      {
-        let click_to_op = parseInt("".concat(Math.floor(last_click[0]),Math.floor(last_click[1])))*-1+0.5;
-        if(last_operation == click_to_op) return;
-        last_operation = click_to_op;
-      } 
+    points.push(last_click);
+    });
 
-      undo_history.push(undoElements());
-      
-      point_elems.push(main_node.append("circle")
-                                .attr("cx", last_click[0])
-                                .attr("cy", last_click[1])
-                                .attr("r", 2)
-                                .attr("fill", "black")
-                                .attr("stroke-width", 1)
-                                .attr("stroke", "white"));
-
-      points.push(last_click);
-      });
-
+    //right click
     svg.on("contextmenu", function(){
               d3.event.preventDefault();
         });
 
+    //keeps track of our mouse position whenever hovering over svg we are editing
     svg.on('mousemove', function(){x_y = d3.mouse(this);});
 
+    //called by our config dropdowns
     function changeStrokeWidth(new_width)
     {
       for(sel of selected) d3.select(sel).attr('stroke-width', new_width);
       stroke_width = new_width;
     };
 
+    function changePtSize(new_size)
+    {
+      for(pt of point_elems) pt.attr("r", new_size);
+      pt_size = new_size;
+    };
+
+    //called on right click, selects topmost polygon under cursor
     function contextMenuCalled()
     {
       last_right_click = d3.mouse(this);
@@ -281,34 +314,28 @@
       }
     };
 
+    //called whenever a key is pressed
     document.onkeydown = checkKey;
 
-    function handleSubmit(event)
-    {
-      //stop page from reloading
-      event.preventDefault();
-      if(!file.value.length) return;
-      let reader = new FileReader();
-      reader.onload = function(event){
-        addbgRef(event.target.result);
-        addbgRef(event.target.result);
-        addbgRef(event.target.result);
-        addbgRef(event.target.result);
-        addbgRef(event.target.result);
-        addbgRef(event.target.result);
-      }
-      reader.readAsDataURL(file.files[0]);
-    }
+    //called when we press upload for background image file
+    form.addEventListener('submit', function(event)
+                                    {
+                                      //stop page from reloading
+                                      event.preventDefault();
+                                      if(!file.value.length) return;
+                                      let reader = new FileReader();
+                                      reader.onload = function(event){
+                                      addbgRef(event.target.result);
+                                      }
+                                      reader.readAsDataURL(file.files[0]);
+                                    });
 
-    form.addEventListener('submit', handleSubmit);
-
-    //encode entire svg into a hex str
+    //encode entire svg into a hex str, called when encode pressed, result stored in textbox
+    //also called in exportSVG and stored inside SVG XML (can be retreived by opening SVG in text editor)
     function encode()
     {
       for(let i = 0; i < shapes.length; i++)
       {
-        applyTranslation(shapes[i]);
-        applyRotation(shapes[i]);
         shapes[i].attr('fill', d3.rgb(shapes[i].attr('fill')).toString());
       }
 
@@ -361,6 +388,7 @@
       return encodedStr;
     };
 
+    //called when decode is pressed, loads code string from textbox into the image it represents in the svg editor
     function decode(encodedStr)
     {
       let enc_shapes = encodedStr.split('A');
@@ -407,6 +435,7 @@
 
     };
 
+    //called when share is pressed, generates a sharable weblink to image in editor if image is simple enough (URL length constraints)
     function share()
     {
       let shareStr = "http://54.191.145.57/polyform.html?width=".concat(width,"&height=",height,"&data=");
@@ -418,6 +447,7 @@
       else alert("URL too large to share, try saving the SVG via EXPORT button and share the file another way");
     };
 
+    //paints checkered grid thats on by default behind the elements in our SVG editor
     function paintAlphaGrid(width, height)
     {
       let grid_tile_size = Math.floor(width/20);
@@ -488,45 +518,62 @@
                    .attr("stroke-width", 4);
     };
 
+    //removes checkered grid thats on by default
     function removeGrid()
     {
       border_n_grid.selectAll('.alpha').remove();
     };
 
-    function addbgRef(src = null)
+    //fits max amount of background image possible into our editor while maintaining aspect ratio
+    //second argument should be passed in as true if src is a weblink, stay false or unincluded if src is base64
+    function makeBGImage(src, web = false)
     {
-      if(d3.select('canvas')._groups[0][0] != null) d3.select('canvas').remove();
-      let fileName = src;
+      img.src = src;
+      if(web) img.crossOrigin = '';
 
-      if(fileName == null)
+      let aspect;
+      img.onload = function()
+                  {
+                    aspect = this.width/this.height;
+                    if(aspect >= 1) ctx.drawImage(img, 0, 0, width, height/aspect);
+                    else ctx.drawImage(img, 0, 0, width*aspect, height);
+                    //print error if image fails to load, offer to open imgur in new tab
+                    if(this.width == 0 && this.height == 0) 
+                    {
+                      
+                      
+                    } else error_str = null;
+                  };
+
+      img.onerror = function()
+                    {
+                      paintAlphaGrid(width,height);
+                      img = new Image();
+                      let error_str = "Image failed to load, if its a web-hosted image likely image owner"
+                              .concat("has cross-origin disabled, try downloading the image and uploading via the")
+                              .concat("to upload' section below. Or, alternatively, get a reference")
+                              .concat("image from a cross-origin friendly source such as imgur.com")
+                              .concat("\n Press ok to open imgur in new tab");
+                      if(window.confirm(error_str)) window.open('https://imgur.com/', "_blank");
+
+                    };
+    };
+
+    //paints a background image behind svg editor in place of default grid
+    function addbgRef(src = null, web = false)
+    {
+      ctx.clearRect(0, 0, width, height);
+      if(src == null)
       {
+        img = new Image();
         paintAlphaGrid(width,height);
         return;
       } else removeGrid();
-
-      c = d3.select('#d3cont').append('canvas').attr('width',width).attr('height',height);
-      document.getElementsByTagName('CANVAS')[0].style.position = 'absolute';
-      document.getElementsByTagName('CANVAS')[0].style.left = "".concat(Math.floor(screen_width/2-width/2),'px');
-      let ctx = c.node().getContext('2d');
-      let img = new Image();
-      img.src = fileName;
-      let aspect = img.width/img.height;
-      let paintWidth, paintHeight;
-      if(aspect >= 1){
-        paintWidth = width;
-        paintHeight = height/aspect;
-      }
-      else
-      {
-        paintHeight = height;
-        paintWidth = width*aspect;
-      }
-      //img.crossOrigin = '';
-      img.onload = () => ctx.drawImage(img,0,0,paintWidth,paintHeight);
-      c.lower();
-      return img;
+      
+      return makeBGImage(src, web);
     };
 
+    //recreates a shape from string list of attributes (usually generated by undoElements())
     function remakeShape(attributes)
     {
       let name = attributes[0];
@@ -542,7 +589,7 @@
       return new_shape;
     };
 
-    //gets a deep copy of all current shapes to strings so we can remake them
+    //creates a deep copy of everything currently in editor so we can recreate it
     function undoElements()
     {
       let undo_elems = [[],[],[...points]];
@@ -564,6 +611,7 @@
       return undo_elems;
     };
 
+    //reverts to last state we pushed to undo_history
     function undo()
     {
       if(undo_history.length)
@@ -579,20 +627,20 @@
         point_elems = [];
 
         points = revert[2];
-
+        
+        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
+        selected = [];
+        
         for(let i = 0; i < points.length; i++)
         {
           point_elems.push(main_node.append("circle")
                                 .attr("cx", points[i][0])
                                 .attr("cy", points[i][1])
-                                .attr("r", 2)
+                                .attr("r", pt_size)
                                 .attr("fill", "black")
                                 .attr("stroke-width", 1)
                                 .attr("stroke", "white"));
         }
-        
-        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
-        selected = [];
 
         for(let i = 0; i < revert[1].length; i++)
           for(let j = 0; j < shapes.length; j++)
@@ -603,6 +651,7 @@
       return false;
     };
 
+    //reverts to last state we pushed to redo_history
     function redo()
     {
       if(redo_history.length)
@@ -619,19 +668,19 @@
 
         points = revert[2];
 
+        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
+        selected = [];
+        
         for(let i = 0; i < points.length; i++)
         {
           point_elems.push(main_node.append("circle")
                                 .attr("cx", points[i][0])
                                 .attr("cy", points[i][1])
-                                .attr("r", 2)
+                                .attr("r", pt_size)
                                 .attr("fill", "black")
                                 .attr("stroke-width", 1)
                                 .attr("stroke", "white"));
         }
-
-        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
-        selected = [];
 
         for(let i = 0; i < revert[1].length; i++)
           for(let j = 0; j < shapes.length; j++)
@@ -642,6 +691,7 @@
       return false;
     };
 
+    //duplicates all selected elements
     function cloneElem(elem)
     {
       shapes.push(d3.select(elem).clone([true]));
@@ -653,25 +703,6 @@
       id_counter++;
   };
 
-  //TODO add this to its own file helperfunctions.js and include in future projects
-  //returns a new string with toRemove removed
-  function removeFromString(string, toRemove)
-  {
-    let beginIndex = string.indexOf(toRemove);
-    if(beginIndex == -1) return string;
-    let endIndex = beginIndex + toRemove.length;
-    return string.slice(0,beginIndex) + string.slice(endIndex,string.length);
-  };
-
-  //TODO add this to its own file helperfunctions.js and include in future projects
-  //returns a new string with toInsert added at given index insertIndex
-  function stringInsert(string, toInsert, insertIndex)
-  {
-    let strBegin = string.slice(0,insertIndex);
-    let strEnd = string.slice(insertIndex,string.length);
-    return strBegin.concat(toInsert,strEnd);
-  };
-
   //select/deselect all, called when 'a' is pressed
   function selectAll()
   {
@@ -681,9 +712,12 @@
     {
       for(let i = 0; i < shapes.length; i++)
       {
-        selected.push(shapes[i]._groups[0][0]);
-        shapes[i].attr('stroke-width', stroke_width)
-                 .attr('stroke', "gold");
+        if(shapes[i].attr('style') != 'visibility: hidden;')
+        {
+          selected.push(shapes[i]._groups[0][0]);
+          shapes[i].attr('stroke-width', stroke_width)
+                   .attr('stroke', "gold");
+        }
       }
     }
     //if anything selected deselect all
@@ -697,18 +731,20 @@
     }
   };
 
+  //truncates pts of all shapes in svg canvas to integers to prep for exporting
   function integerizePoints()
   {
     let pt_list, pt_str;
     for(shape of shapes)
     {
-      pt_list = shape._groups[0][0].points;
+      pt_list = shape.node().points;
       pt_str = "".concat(Math.floor(pt_list[0].x), ",", Math.floor(pt_list[0].y));
       for(let i = 1; i < pt_list.length; i++) pt_str = pt_str.concat(" ", Math.floor(pt_list[i].x), ",", Math.floor(pt_list[i].y));
       shape.attr('points', pt_str);
     }
   };
 
+  //downloads contents of svg editor to a svg file for user
   function exportSVG()
   {
     integerizePoints();
@@ -756,112 +792,59 @@
     return null;
   }
 
-  //get translation x & y from a d3 selection element
-  function getTranslation(elem)
+  //rotates a given polygon element a given number of degrees around given origin
+  function applyRotation(elem, degrees, origin)
   {
-    let translate = [0,0];
-    let transform_str = elem.attr("transform");
-
-    //return [0,0] if we havent yet done any transformation on selected shape
-    if(transform_str == null) return translate;
-
-    let translateStrInd = transform_str.indexOf("translate");
-
-    //if we haven't translated element return [0,0]
-    if(translateStrInd == -1) return translate;
-
-    //otherwise parse transform string for translation x and y values
-    let tslStrStart = transform_str.indexOf("(", translateStrInd)+1;
-    let tslStrY = transform_str.indexOf(",", tslStrStart)+1;
-    let tslStrEnd = transform_str.indexOf(")", tslStrY);
-    translate[0] = parseFloat(transform_str.substring(tslStrStart,tslStrY-1));
-    translate[1] = parseFloat(transform_str.substring(tslStrY,tslStrEnd));
-
-    return translate;
-  }
-
-  //used to parse number values from last rotation in transform string
-  function getRotation(string)
-  {
-    let rotation = [0,0,0];
-
-    //return [0,0] if we havent yet done any transformation on selected shape
-    if(string == null) return rotation;
-
-    //otherwise parse transform string for translation x and y values
-    let rotStrStart = string.indexOf("(")+1;
-    let rotStrX = string.indexOf(",", rotStrStart)+1;
-    let rotStrEnd = string.indexOf(")", rotStrStart);
-
-    //degrees
-    rotation[0] = parseFloat(string.substring(rotStrStart,rotStrX-1));
-    let rotStrY = string.indexOf(",", rotStrX)+1;
-    //x,y value to rotate around
-    rotation[1] = parseFloat(string.substring(rotStrX,rotStrY-1));
-    rotation[2] = parseFloat(string.substring(rotStrY,rotStrEnd));
-
-    return rotation;
-  };
-
-  function applyRotation(elem)
-  {
-    if(elem.attr("transform") == null) return;
-    let new_transform = elem.attr("transform").split(/\s+/);
-    let rotation = [0,0,0];
     let pt_list, pt_str;
     let dX, dY, newX, newY, r, angle;
-    for(let i = 0; i < new_transform.length; i++)
+    rotation = [degrees, origin[0], origin[1]];
+    pt_list = elem.points;
+    pt_str = "";
+    for(let j = 0; j < pt_list.length; j++)
     {
-      if(new_transform[i].slice(0,6) == "rotate")
+      dX = pt_list[j].x - rotation[1];
+      dY = rotation[2] - pt_list[j].y;
+      r = Math.sqrt(dX**2 + dY**2);
+      angle = Math.atan2(dY,dX) - rotation[0]*Math.PI/180;
+      newX = rotation[1] + r*Math.cos(angle);
+      newY = rotation[2] - r*Math.sin(angle);
+      if(j < pt_list.length-1)
       {
-        rotation = getRotation(new_transform.splice(i,1)[0]);
-        pt_list = elem._groups[0][0].points;
-        pt_str = "";
-        for(let j = 0; j < pt_list.length; j++)
-        {
-          dX = pt_list[j].x - rotation[1];
-          dY = rotation[2] - pt_list[j].y;
-          r = Math.sqrt(dX**2 + dY**2);
-          angle = Math.atan2(dY,dX) - rotation[0]*Math.PI/180;
-          newX = rotation[1] + r*Math.cos(angle);
-          newY = rotation[2] - r*Math.sin(angle);
-          if(j < pt_list.length-1)
-          {
-            pt_str = pt_str.concat(newX,",");
-            pt_str = pt_str.concat(newY," ");
-          }
-        }
-        //append last pt without trailing space
-        pt_str = pt_str.concat(newX,",",newY);
-        elem.attr("points", pt_str);   
+        pt_str = pt_str.concat(newX,",");
+        pt_str = pt_str.concat(newY," ");
       }
     }
-    elem.attr("transform", new_transform.join(" "));
+    //append last pt without trailing space
+    pt_str = pt_str.concat(newX,",",newY);
+    d3.select(elem).attr("points", pt_str);   
   };
 
-  function applyScale(elem, factorX, factorY)
+  //averages all points of all selected polygons to get the centerpoint of our entire selection
+  function getSelectedCenter()
   {
-    let scale = [factorX,factorY];
-    let pt_list, pt_str;
     let xSum = 0;
-    let new_pts = [];
     let ySum = 0;
     let num_values = 0;
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      pt_list = selected[i].points;
-      for(let j = 0; j < pt_list.length; j++)
+      pt_list = sel.points;
+      for(pt of pt_list)
       {
-        xSum += pt_list[j].x;
-        ySum += pt_list[j].y;
+        xSum += pt.x;
+        ySum += pt.y;
         num_values++;
       }
     }
-    
-    let origin = [xSum/num_values, ySum/num_values];
+    return [xSum/num_values, ySum/num_values];
+  };
+
+  //scales a given polygon element by a [factorX,factorY] scale toward a given origin point (usually getSelectedCenter())
+  function applyScale(elem, scale, origin)
+  {
+    let pt_list, pt_str;
     let x,y;
     pt_str = "";
-    pt_list = elem._groups[0][0].points;
+    pt_list = elem.points;
     for(let j = 0; j < pt_list.length; j++)
     {
       x = (pt_list[j].x-origin[0])*scale[0];
@@ -875,15 +858,15 @@
     }
     pt_str = pt_str.concat(origin[0]+x,",");
     pt_str = pt_str.concat(origin[1]+y);
-    elem.attr("points", pt_str);
+    d3.select(elem).attr("points", pt_str);
   }
 
-  function applyTranslation(elem)
+  //translates a given element a translation t, t = [xTranslation, yTranslation]
+  function applyTranslation(elem, t)
   {
-    let t = getTranslation(elem);
     if(t[0] == 0 && t[1] == 0) return;
 
-    let pt_list = elem._groups[0][0].points;
+    let pt_list = elem.points;
 
     let pt_str = "";
 
@@ -897,105 +880,51 @@
     pt_str = pt_str.concat(pt_list[j].x+t[0],",");
     pt_str = pt_str.concat(pt_list[j].y+t[1]);
 
-    elem.attr("points", pt_str);
-    let new_transform = elem.attr("transform").split(/\s+/);
-    new_transform.shift();
-    elem.attr("transform", new_transform.join(" "));
+    d3.select(elem).attr("points", pt_str);
   };
 
   //rotate everything in selected around midpoint of selected objects
   function rotateSelected(degrees)
   {
-    if (selected.length == 0) return false;
-
-    let xSum = 0;
-    let ySum = 0;
-    let num_values = 0;
-    let sel_elem = null;
-    let pt_list = null;
-    let translation;
-
-    for(let i = 0; i < selected.length; i++)
-    {
-      sel_elem = d3.select(selected[i]);
-      
-      applyTranslation(sel_elem);
-      applyRotation(sel_elem);
-
-      pt_list = sel_elem._groups[0][0].points;
-
-      for(let j = 0; j < pt_list.length; j++)
-      {
-        xSum += sel_elem._groups[0][0].points[j].x;
-        ySum += sel_elem._groups[0][0].points[j].y;
-        num_values++;
-      }   
-    }
-
-    let origin = [xSum/num_values, ySum/num_values];
-
-    for(let i = 0; i < selected.length; i++)
-    {
-
-      let transform_str = d3.select(selected[i]).attr("transform");
-
-      //if we havent done any transformations yet, no other pieces of string to worry about
-      if(transform_str == null) 
-      {
-        d3.select(selected[i]).attr("transform", "rotate(".concat(degrees, ",", origin[0], ",", origin[1], ")"));
-        continue;
-      }
-
-      //let rotateInd = transform_str.indexOf("rotate");
-      let rotatedLast = transform_str.split(/\s+/).slice(-1)[0].slice(0,6) == "rotate";
-      let rotation = [0,0,0];
-      if(rotatedLast) rotation = getRotation(transform_str.split(/\s+/).slice(-1)[0]);
-
-      
-      //if we've already rotated, need to insert translation into proper place in string
-      if(rotatedLast && origin[0] == rotation[1] && origin[1] == rotation[2])
-      {
-        let splitTF = d3.select(selected[i]).attr("transform").split(/\s+/);
-        splitTF.pop()
-        splitTF.push("rotate(".concat(rotation[0] + degrees, ",", origin[0], ",", origin[1], ")"));
-        d3.select(selected[i]).attr("transform", splitTF.join(' '));
-      }
-      else
-      {
-        d3.select(selected[i]).attr("transform", transform_str.concat(" rotate(".concat(degrees, ",", origin[0], ",", origin[1], ")")));
-      }
-      d3.select(selected[i]).attr("transform", d3.select(selected[i]).attr("transform").split(/\s+/).join(' '));
-    }
+    if(selected.length == 0) return false;
+    let origin = getSelectedCenter();
+    for(sel of selected) applyRotation(sel, degrees, origin);
     return true;
   };
 
-  function scaleSelected(factorX,factorY)
+  //translate selected elements a given [x,y]
+  function translateSelected(translation)
   {
-    let sel_elem;
-    for(let i = 0; i < selected.length; i++){
-      sel_elem = d3.select(selected[i]);
-      applyTranslation(sel_elem);
-      applyRotation(sel_elem);
-      applyScale(sel_elem,factorX,factorY);
-    }
+    if(selected.length == 0) return false;
+    for(sel of selected) applyTranslation(sel, translation);
     return true;
   };
 
+  //scale selected elements a given [x,y]
+  function scaleSelected(scale, origin)
+  {
+    if(selected.length == 0) return false;
+    for(sel of selected) applyScale(sel,scale,origin);
+    return true;
+  };
+
+  //darkens color of selected polygons
   function darkenSelected()
   {
-    for(let i = 0; i < selected.length; i++){
-      d3.select(selected[i]).attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).darker(edit_sp/40));
+    for(sel of selected){
+      d3.select(sel).attr('fill', d3.hsl(d3.select(sel).attr('fill')).darker(edit_sp/40));
     }
     return true;
   };
 
+  //lightens color of selected polygons
   function brightenSelected()
   {
     let sel_elem;
 
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      sel_elem = d3.select(selected[i]);
+      sel_elem = d3.select(sel);
 
       if(sel_elem.attr('fill') == 'black' || sel_elem.attr('fill') == d3.rgb('black'))
       {
@@ -1004,19 +933,18 @@
         new_color.l = 0.1;
         sel_elem.attr('fill', new_color);
       }
-      sel_elem.attr('fill', d3.hsl(d3.select(selected[i]).attr('fill')).brighter(edit_sp/40));
+      sel_elem.attr('fill', d3.hsl(sel_elem.attr('fill')).brighter(edit_sp/40));
     }
-
     return true;
   };
 
+  //adjusts saturation of selected elements by a given factor, set fullsat to true to fully saturate color of selected elements
   function adjustSaturation(factor, fullsat = false)
   {
     let new_color;
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-
-      sel_elem = d3.select(selected[i]);
+      sel_elem = d3.select(sel);
       new_color = d3.hsl(sel_elem.attr('fill'));
       if(fullsat == true) new_color.s = 1;
       else new_color.s *= factor;
@@ -1025,14 +953,15 @@
     return true;
   };
 
+  //changes order of selected polygons in dom so that they are painted on top of unselected polys
   function raiseSelected()
   {
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      d3.select(selected[i]).raise();
+      d3.select(sel).raise();
       for(let j = 0; j < shapes.length; j++)
       {
-        if(shapes[j].node().id == selected[i].id)
+        if(shapes[j].node().id == sel.id)
         {
           shapes.push(shapes.splice(j,1)[0]);
           break;
@@ -1042,14 +971,15 @@
     }
   };
 
+  //changes order of selected polygons in dom so that they are painted below unselected polys
   function lowerSelected()
   {
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      d3.select(selected[i]).lower();
+      d3.select(sel).lower();
       for(let j = 0; j < shapes.length; j++)
       {
-        if(shapes[j].node().id == selected[i].id) 
+        if(shapes[j].node().id == sel.id) 
         {
           shapes.unshift(shapes.splice(j,1)[0]);
           break;
@@ -1058,6 +988,7 @@
     }
   };
 
+  //makes selected elements invisible and uninteractable until unhidden, if nothing selected unhides all hidden
   function hideSelected()
   {
     if(selected.length)
@@ -1078,31 +1009,44 @@
       }
       hidden = [];
     }
+    else
+    {
+      //fallback in case shape fails to unhide
+      if(last_operation == 73)
+      {
+        for(shape of shapes)
+        {
+          shape.attr('style', 'visibility: visible;');
+        }
+      }
+    }
   };
 
+  //makes selected elements more transparent, called when 'o' pressed
   function lowerOpacity()
   {
     let sel_elem;
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      sel_elem = d3.select(selected[i]);
+      sel_elem = d3.select(sel);
       if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity', 1-(edit_sp/40));
       else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*(1-(edit_sp/40)).toFixed(4))));
     }
   };
 
+  //makes selected elements less transparent, called when 'p' pressed
   function raiseOpacity()
   {
     let sel_elem;
-    for(let i = 0; i < selected.length; i++)
+    for(sel of selected)
     {
-      sel_elem = d3.select(selected[i]);
+      sel_elem = d3.select(sel);
       if(sel_elem.attr('opacity') == null || sel_elem.attr('opacity') > 1) sel_elem.attr('opacity',1);
       else sel_elem.attr('opacity', parseFloat((sel_elem.attr('opacity')*(1+edit_sp/40).toFixed(4))));
     }
   };
 
-  //increase hue, called when ~ is pressed
+  //shift hue, called when ~ is pressed
   function hueShiftRight()
   {
     let new_color;
@@ -1123,7 +1067,7 @@
     }
   };
 
-  //toggles continuous hue shifting animation
+  //toggles continuous hue shifting animation on selected elements
   function animateHue()
   {
     let sel;
@@ -1152,7 +1096,7 @@
     }
   };
 
-  //toggles continuous brightening and return back to original color of selected fills
+  //toggles continuous brightening and return back to original color of fills on selected elements
   function animateFlash()
   {
     let sel;
@@ -1186,31 +1130,7 @@
       sel = d3.select(elem);
       if(sel.select('#rotateAnim').empty())
       {
-        let xSum = 0;
-        let ySum = 0;
-        let num_values = 0;
-        let sel_elem = null;
-        let pt_list = null;
-        let translation;
-
-        for(let i = 0; i < selected.length; i++)
-        {
-          sel_elem = d3.select(selected[i]);
-          
-          applyTranslation(sel_elem);
-          applyRotation(sel_elem);
-
-          pt_list = sel_elem._groups[0][0].points;
-
-          for(let j = 0; j < pt_list.length; j++)
-          {
-            xSum += sel_elem._groups[0][0].points[j].x;
-            ySum += sel_elem._groups[0][0].points[j].y;
-            num_values++;
-          }   
-        }
-
-        let origin = "".concat(xSum/num_values," ",parseFloat(ySum/num_values));
+        let origin = getSelectedCenter();
 
         sel.append("animateTransform")
            .attr("attributeName", "transform")
@@ -1227,6 +1147,7 @@
     }
   };
 
+  //copies color under cursor from bg image or polygon to all selected polygons
   function copyColor()
   {
     if(moused_over != null)
@@ -1238,24 +1159,21 @@
         sel_elem.attr('fill', d3.select(moused_over).attr('fill'));
       }
     }
-    else if(c != null)
+    //if an image is currently loaded
+    else if(img.width != 0)
     {
       let ctx = c._groups[0][0].getContext('2d');
       let data = ctx.getImageData(x_y[0], x_y[1], 1, 1).data;
       let new_color = "rgb(".concat(data[0],",",data[1],',',data[2],")");
-      let sel_elem;
-      for(sel of selected)
-      {
-        sel_elem = d3.select(sel);
-        sel_elem.attr('fill', new_color);
-      }
+      for(sel of selected) d3.select(sel).attr('fill', new_color);
     }
   };
 
+  //called whenever any key is pressed
   function checkKey(e)
   {
     console.log(e.keyCode);
-    //we dont want to add to undo history if we're hitting undo
+    //we dont want to add to undo history if we're hitting undo or redo
     if((e.keyCode != last_operation || e.keyCode == 13 || e.keyCode == 65) && e.keyCode != 85 && e.keyCode != 82) undo_history.push(undoElements());
     while(undo_history.length > max_undo_steps) undo_history.shift();
 
@@ -1331,59 +1249,20 @@
     {
       e.preventDefault();
       let toTranslate;
-
       switch(e.keyCode)
       {
         case 37:
-          toTranslate = [-edit_sp,0];
+          translateSelected([-edit_sp,0]);
           break;
         case 38:
-          toTranslate = [0,-edit_sp];
+          translateSelected([0,-edit_sp]);
           break;
         case 39:
-          toTranslate = [edit_sp,0];
+          translateSelected([edit_sp,0]);
           break;
         case 40:
-          toTranslate = [0,edit_sp];
+          translateSelected([0,edit_sp]);
           break;
-      }
-      
-      for(let i = 0; i < selected.length; i++)
-      {
-        //transform property as string
-        let t = getTranslation(d3.select(selected[i]));
-        let final_toT = [toTranslate[0],toTranslate[1]];
-        if(t)
-        {
-          final_toT[0] += t[0];
-          final_toT[1] += t[1];
-        }
-
-        let transform_str = d3.select(selected[i]).attr("transform");
-
-        //if we havent done any transformations yet, no other pieces of string to worry about
-        if(transform_str == null) 
-        {
-          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],")"));
-          continue;
-        }
-
-        let translateInd = transform_str.indexOf("translate");
-
-        //if we've already translated, need to insert translation into proper place in string
-        if(translateInd != -1)
-        {
-          let translateEnd = transform_str.indexOf(")", translateInd);
-          let newTFb4 = transform_str.slice(0, translateInd);
-          let newTFAfter = transform_str.slice(translateEnd+1, transform_str.length);
-          let TFInsert = "translate(".concat(final_toT[0],",",final_toT[1],")");
-          d3.select(selected[i]).attr("transform", newTFb4 + TFInsert + newTFAfter);
-        }
-        else
-        {
-          d3.select(selected[i]).attr("transform", "translate(".concat(final_toT[0],",",final_toT[1],") ").concat(transform_str));
-        }
-        d3.select(selected[i]).attr("transform", d3.select(selected[i]).attr("transform").split(/\s+/).join(' '));
       }
     }
     //if d key is pressed, duplicate selected
@@ -1403,18 +1282,22 @@
       if(e.keyCode == 188) rotateSelected(-edit_sp/2);
       else rotateSelected(edit_sp/2);
     }
-    //scale selected on n and m keys
-    else if(e.keyCode == 78 || e.keyCode == 77)
+    //scale selected on n and m keys, mirror on x and y keys
+    else if(e.keyCode == 78 || e.keyCode == 77 || e.keyCode == 88 || e.keyCode == 89)
     {
-      //173 is scale down
-      if(e.keyCode == 78) scaleSelected(1-(edit_sp/40),1-(edit_sp/40));
-      //61 is scale up
-      else scaleSelected(1+(edit_sp/40),1+(edit_sp/40));
+      let num_applications = edit_sp*2;
+      let origin = getSelectedCenter();
+
+      //78 (n) scales down
+      if(e.keyCode == 78)      for(let i = 0; i < num_applications; i++) scaleSelected([0.9875,0.9875], origin);
+      //77 (m) scales up
+      else if(e.keyCode == 77) for(let i = 0; i < num_applications; i++) scaleSelected([1.0125,1.0125], origin);
+
+      //mirror on x when x key is pressed
+      else if(e.keyCode == 88) scaleSelected(-1,1, origin);
+      //mirror on y when y key is pressed
+      else if(e.keyCode == 89) scaleSelected(1,-1, origin);
     }
-    //mirror on x when x key is pressed
-    else if(e.keyCode == 88) scaleSelected(-1,1);
-    //mirror on y when y key is pressed
-    else if(e.keyCode == 89) scaleSelected(1,-1);
     //brighten color of selected if b is pressed
     else if(e.keyCode == 66) brightenSelected();
     //brighten color of selected if v is pressed
@@ -1454,7 +1337,6 @@
     //hides selected elements if there are any, otherwise unhides all hidden
     else if(e.keyCode == 73) hideSelected();
   };
-
   </script>
 
 </html>
