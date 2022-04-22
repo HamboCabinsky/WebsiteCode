@@ -73,9 +73,9 @@
 <script>
     /*TODO
       Make button for adding background color
-      Add animations to export encoded string
       Add new grow/shrink
       Implement joining, unjoining
+      Resize image button
     */
     let screen_width  = screen.width;
     let width, height, c, ctx, x_y;
@@ -334,57 +334,51 @@
     //also called in exportSVG and stored inside SVG XML (can be retreived by opening SVG in text editor)
     function encode()
     {
-      for(let i = 0; i < shapes.length; i++)
-      {
-        shapes[i].attr('fill', d3.rgb(shapes[i].attr('fill')).toString());
-      }
-
-      let toEncode = main_node.html();
-      let encodedStr = "";
-      let pt_arr, rgb, endIndex, op_ind, op;
+      integerizePoints();
       let first_iter = true;
-
-      while(toEncode.indexOf('points') != -1)
+      let encodedStr = "";
+      let pt_list, rgb, op_str, animId, originStr, origin;
+      for(shape of shapes)
       {
+        shape.attr('fill', d3.rgb(shape.attr('fill')).toString());
         if(first_iter) first_iter = false;
-        //start new polygon
         else encodedStr = encodedStr.concat("A");
-        
-        //cut off up to start of points
-        toEncode = toEncode.slice(toEncode.indexOf("\"")+1);
-        //get points as an array
-        pt_arr = toEncode.slice(0,toEncode.indexOf("\"")).split(/[, ]+/);
-        let i;
-        for(i = 0; i < pt_arr.length-1; i++)
-          if(pt_arr[i] != "") encodedStr = encodedStr.concat(parseInt(pt_arr[i]),'B');
-        if(pt_arr[i] != "") encodedStr = encodedStr.concat(parseInt(pt_arr[i]));
-
-        //move on to fill attribute
+        pt_list = shape.node().points;
+        encodedStr = encodedStr.concat(pt_list[0].x,'B',pt_list[0].y);
+        for(let i = 1; i < pt_list.length; i++) encodedStr = encodedStr.concat('B',pt_list[i].x,'B',pt_list[i].y);
         encodedStr = encodedStr.concat('C');
-        toEncode = toEncode.slice(toEncode.indexOf("(")+1);
-        rgb = toEncode.slice(0,toEncode.indexOf(')')).split(/[ ,]+/);
+        rgb = shape.attr('fill');
+        rgb = rgb.slice(rgb.indexOf("(")+1,rgb.indexOf(')')).split(/[ ,]+/);
         encodedStr = encodedStr.concat(rgb[0], 'B', rgb[1], 'B', rgb[2]);
-        endIndex = toEncode.indexOf('</polygon>');
-        op_ind = toEncode.indexOf('opacity');
-        if(op_ind < endIndex && op_ind != -1)
+
+        animId = shape.attr('animId');
+        if(animId) animId = parseInt(animId);
+        if(shape.attr('opacity') || animId)
         {
-          toEncode = toEncode.slice(op_ind);
-          toEncode = toEncode.slice(toEncode.indexOf("\"")+1);
-          //if opacity is >= 1 skip this attribute
-          op = toEncode.slice(0,toEncode.indexOf("\""))
-          if(parseFloat(op) >= 1){
-            toEncode = toEncode.slice(toEncode.indexOf("points"));
-            continue;
+          encodedStr = encodedStr.concat('C');
+          if(!shape.attr('opacity')) encodedStr = encodedStr.concat("-1");
+          else 
+          {
+            op_str = shape.attr('opacity');
+            encodedStr = encodedStr.concat(op_str.slice(op_str.indexOf('.')+1));
           }
-          encodedStr = encodedStr.concat('D');
-          //else assume its a floating pt, only store whats after the decimal
-          op = op.slice(op.indexOf('.')+1);
-          encodedStr = encodedStr.concat(op);
+
+          if(animId)
+          {
+            encodedStr = encodedStr.concat('C', animId);
+            //means we have a rotate, need to get origin
+            if(animId >= 4)
+            {
+              encodedStr = encodedStr.concat('C');
+              originStr = shape.select('animateTransform').node().getAttribute("from");
+              origin = originStr.slice(originStr.indexOf(" ")+1).split(' ');
+              encodedStr = encodedStr.concat(parseInt(origin[0]), "B", parseInt(origin[1]));
+            }
+          }
+          
         }
-        toEncode = toEncode.slice(toEncode.indexOf("polygon points"));
       }
-      //replace all negative signs with E
-      encodedStr = encodedStr.replaceAll('-', 'E');
+      encodedStr = encodedStr.replaceAll('-', 'D');
       return encodedStr;
     };
 
@@ -392,16 +386,17 @@
     function decode(encodedStr)
     {
       let enc_shapes = encodedStr.split('A');
-      let attributes, points, fill, opacity, pt_str, fill_str, op_str;
+      let attributes, points, fill, opacity, pt_str, fill_str, op_str, animId, origin;
       let i;
       for(i = 0; i < enc_shapes.length; i++)
       {
         //split our encoded string into easily parsable arrays
-        attributes = enc_shapes[i].split(/[CD]+/);
+        attributes = enc_shapes[i].split('C');
         points = attributes[0].split('B');
         fill = attributes[1].split('B');
         //as of right now we are only looking at points, fill, and opacity attributes, opacity optional
         if(attributes.length > 2) opacity = attributes[2];
+        if(attributes.length > 3) animId = attributes[3];
 
         //generate strings for our attributes
         pt_str = "";
@@ -410,10 +405,10 @@
         for(j = 0; j < points.length-2; j+=2) pt_str += points[j] + "," + points[j+1] + " ";
         pt_str += points[j] + "," + points[j+1];
         //replace all Es with negative signs
-        pt_str = pt_str.replaceAll('E', '-');
+        pt_str = pt_str.replaceAll('D', '-');
         fill_str = "rgb(" + fill[0] + ", " + fill[1] + ", " + fill[2] +")";
 
-        if(attributes.length > 2) op_str = "0." + opacity;
+        if(attributes.length > 2 && opacity != 'D1') op_str = "0." + opacity;
         else op_str = null;
         //create the shape and give it our attributes
         shapes.push(main_node.append("polygon")
@@ -431,6 +426,19 @@
 
         //if we have an opacity, apply it
         if(op_str) shapes[shapes.length-1].attr('opacity', op_str);
+        if(attributes.length > 3 && animId != '0')
+        {
+          animId = parseInt(animId);
+          if(animId%2 == 1) animHueElem(shapes[shapes.length-1]);
+          animId = animId >> 1;
+          if(animId%2 == 1) animFlashElem(shapes[shapes.length-1]);
+          animId = animId >> 1;
+          if(animId%2 == 1) {
+            origin = attributes[4].split('B');
+            animRotateElem(shapes[shapes.length-1],[parseInt(origin[0]),parseInt(origin[1])]);
+          }
+        }
+        console.log(shapes[shapes.length-1]);
       }
 
     };
@@ -849,6 +857,7 @@
     {
       x = (pt_list[j].x-origin[0])*scale[0];
       y = (pt_list[j].y-origin[1])*scale[1];
+      console.log(x,y);
 
       if(j < pt_list.length-1)
       {
@@ -1067,83 +1076,125 @@
     }
   };
 
+  function animHueElem(sel)
+  {
+    animId = sel.attr('animId');
+    if(sel.select('#hueAnim').empty())
+    {
+      if(animId == null) animId = 1;
+      else animId = parseInt(animId) + 1;
+      let colorStart = d3.rgb(sel.attr('fill')).toString();
+      let colorMid = d3.hsl(colorStart);
+      colorMid.h += 128;
+      colorMid = d3.rgb(colorMid).toString();
+      let colorEnd = d3.hsl(colorMid);
+      colorEnd.h += 128;
+      colorEnd = d3.rgb(colorEnd).toString();
+
+      sel.append("animate")
+         .attr("attributeName", "fill")
+         .attr("values", colorStart+';'+colorMid+';'+colorEnd+';'+colorStart)
+         .attr("dur", "4s")
+         .attr("repeatCount", "indefinite")
+         .attr("id", "hueAnim");
+      
+    }
+    else
+    {
+      animId = parseInt(animId) - 1;
+      sel.select('#hueAnim').remove();
+    } 
+    sel.attr('animId', animId);
+  };
+
   //toggles continuous hue shifting animation on selected elements
   function animateHue()
   {
     let sel;
+    let animId;
     for(elem of selected)
     {
       sel = d3.select(elem);
-      if(sel.select('#hueAnim').empty())
-      {
-        let colorStart = d3.rgb(sel.attr('fill')).toString();
-        let colorMid = d3.hsl(colorStart);
-        colorMid.h += 128;
-        colorMid = d3.rgb(colorMid).toString();
-        let colorEnd = d3.hsl(colorMid);
-        colorEnd.h += 128;
-        colorEnd = d3.rgb(colorEnd).toString();
-
-        sel.append("animate")
-           .attr("attributeName", "fill")
-           .attr("values", colorStart+';'+colorMid+';'+colorEnd+';'+colorStart)
-           .attr("dur", "4s")
-           .attr("repeatCount", "indefinite")
-           .attr("id", "hueAnim");
-        
-      }
-      else sel.select('#hueAnim').remove();
+      animHueElem(sel);
     }
+  };
+
+  function animFlashElem(sel)
+  {
+    animId = sel.attr('animId');
+    if(sel.select('#flashAnim').empty())
+    {
+      if(animId == null) animId = 2;
+      else animId = parseInt(animId) + 2;
+      let colorStart = d3.rgb(d3.hsl(sel.attr('fill')).darker(0.8)).toString();
+      let colorEnd = d3.hsl(colorStart).brighter(1.6);
+      colorEnd = d3.rgb(colorEnd).toString();
+
+      sel.append("animate")
+         .attr("attributeName", "fill")
+         .attr("values", colorStart+';'+colorEnd+';'+colorStart)
+         .attr("dur", "2s")
+         .attr("repeatCount", "indefinite")
+         .attr("id", "flashAnim");
+      
+    }
+    else 
+    {
+      sel.select('#flashAnim').remove();
+      animId = parseInt(animId) - 2;
+    }
+    sel.attr('animId', animId);
   };
 
   //toggles continuous brightening and return back to original color of fills on selected elements
   function animateFlash()
   {
     let sel;
+    let animId;
     for(elem of selected)
     {
       sel = d3.select(elem);
-      if(sel.select('#flashAnim').empty())
-      {
-        let colorStart = d3.rgb(d3.hsl(sel.attr('fill')).darker(0.8)).toString();
-        let colorEnd = d3.hsl(colorStart).brighter(1.6);
-        colorEnd = d3.rgb(colorEnd).toString();
-
-        sel.append("animate")
-           .attr("attributeName", "fill")
-           .attr("values", colorStart+';'+colorEnd+';'+colorStart)
-           .attr("dur", "2s")
-           .attr("repeatCount", "indefinite")
-           .attr("id", "flashAnim");
-        
-      }
-      else sel.select('#flashAnim').remove();
+      animFlashElem(sel);
     }
+  };
+
+  function animRotateElem(sel, origin)
+  {
+    animId = sel.attr('animId');
+    if(sel.select('#rotateAnim').empty())
+    {
+      if(animId == null) animId = 4;
+      else animId = parseInt(animId) + 4;
+      
+      sel.append("animateTransform")
+         .attr("attributeName", "transform")
+         .attr("attributeType", "XML")
+         .attr("type", "rotate")
+         .attr("from", "0 ".concat(origin[0], " ", origin[1]))
+         .attr("to", "360 ".concat(origin[0], " ", origin[1]))
+         .attr("dur", "12s")
+         .attr("repeatCount", "indefinite")
+         .attr("id", "rotateAnim");
+      
+    }
+    else
+    {
+     sel.select('#rotateAnim').remove();
+     animId = parseInt(animId) - 4;
+    }
+    sel.attr('animId', animId);
   };
 
   //animates rotating selected elements around center of selection
   function animateRotate()
   {
     let sel;
+    let animId;
+    let origin = getSelectedCenter();
     for(elem of selected)
     {
       sel = d3.select(elem);
-      if(sel.select('#rotateAnim').empty())
-      {
-        let origin = getSelectedCenter();
-
-        sel.append("animateTransform")
-           .attr("attributeName", "transform")
-           .attr("attributeType", "XML")
-           .attr("type", "rotate")
-           .attr("from", "0 " + origin)
-           .attr("to", "360 " + origin)
-           .attr("dur", "12s")
-           .attr("repeatCount", "indefinite")
-           .attr("id", "rotateAnim");
-        
-      }
-      else sel.select('#rotateAnim').remove();
+      animRotateElem(sel, origin);
     }
   };
 
