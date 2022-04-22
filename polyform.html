@@ -1294,9 +1294,9 @@
       else if(e.keyCode == 77) for(let i = 0; i < num_applications; i++) scaleSelected([1.0125,1.0125], origin);
 
       //mirror on x when x key is pressed
-      else if(e.keyCode == 88) scaleSelected(-1,1, origin);
+      else if(e.keyCode == 88) scaleSelected([-1,1], origin);
       //mirror on y when y key is pressed
-      else if(e.keyCode == 89) scaleSelected(1,-1, origin);
+      else if(e.keyCode == 89) scaleSelected([1,-1], origin);
     }
     //brighten color of selected if b is pressed
     else if(e.keyCode == 66) brightenSelected();
