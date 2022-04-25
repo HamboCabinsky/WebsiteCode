@@ -17,6 +17,7 @@
       <a href="cards.html">Guessing Game</a>
       <a href="GUI-tar.html">GUI-tar</a>
       <a href="polyform.html" class="active">PolyForm</a>
+      <a href="featured.html">Featured Arts</a>
       </div>
       <br>
       <section class="title-container">
@@ -55,6 +56,7 @@
         <p>Animations: 'f' key to toggle flash, 'g' toggles rotate, 'h' toggles hue cycling</p>
         <p>Press 'u' to undo last action, 'r' to redo last undo</p>
         <p>Press 'i' to hide all selected polygons or to unhide all hidden polygons if nothing is selected</p>
+        <p>Press 'j' to join selected shapes into a single selectable object, 'k' to unjoin/separate joined pieces</p>
         <p>Click ENCODE to generate an encoded data string that can be used to reload the image in the editor, it will be output in the text area above the button<p>
         <p>Enter the encoded string into the same text area and click DECODE to load an image from its encoded string<p>
         <p>If you export the SVG as a file via the EXPORT SVG button, the encoded string can still be retreived by opening the svg in notepad or another text editor</p>
@@ -74,7 +76,7 @@
     /*TODO
       Make button for adding background color
       Add new grow/shrink
-      Implement joining, unjoining
+      Add joining/unjoining to image encoding and/or add import svg button
       Resize image button
     */
     let screen_width  = screen.width;
@@ -288,6 +290,17 @@
       pt_size = new_size;
     };
 
+    function getAllChildPolys(group, children = [])
+    {
+      let currChildren = group.children;
+      for(let i = 0; i < currChildren.length; i++)
+      {
+        if(currChildren[i].nodeName == 'g') getAllChildPolys(currChildren[i], children);
+        else children.push(currChildren[i]);
+      }
+      return children;
+    };
+
     //called on right click, selects topmost polygon under cursor
     function contextMenuCalled()
     {
@@ -299,18 +312,46 @@
       
       undo_history.push(undoElements());
       while(undo_history.length > max_undo_steps) undo_history.shift();
-      let index = selected.indexOf(this);
-
-      if(index == -1)
+      if(this.parentNode == main_node.node())
       {
-        selected.push(this);
-        d3.select(this).attr('stroke-width', stroke_width)
-                       .attr('stroke', "gold");
+        let index = selected.indexOf(this);
+
+        if(index == -1)
+        {
+          selected.push(this);
+          d3.select(this).attr('stroke-width', stroke_width)
+                         .attr('stroke', "gold");
+        }
+        else
+        {
+          selected.splice(index,1);
+          d3.select(this).attr('stroke-width', 0);
+        }
       }
       else
       {
-        selected.splice(index,1);
-        d3.select(this).attr('stroke-width', 0);
+        let parent = this.parentNode;
+        while(parent.parentNode != main_node.node()) parent = parent.parentNode;
+        let index = selected.indexOf(parent);
+        let children = getAllChildPolys(parent);
+
+        if(index == -1)
+        {
+          selected.push(parent);
+          for(let i = 0; i < children.length; i++)
+          {
+            d3.select(children[i]).attr('stroke-width', stroke_width)
+                           .attr('stroke', "gold");
+          }
+        }
+        else
+        {
+          selected.splice(index,1);
+          for(let i = 0; i < children.length; i++)
+          {
+            d3.select(children[i]).attr('stroke-width', 0);
+          }
+        }
       }
     };
 
@@ -438,7 +479,6 @@
             animRotateElem(shapes[shapes.length-1],[parseInt(origin[0]),parseInt(origin[1])]);
           }
         }
-        console.log(shapes[shapes.length-1]);
       }
 
     };
@@ -601,20 +641,18 @@
     function undoElements()
     {
       let undo_elems = [[],[],[...points]];
-      for(let j = 0; j < shapes.length; j++)
+      let attributes;
+      let dom_order = main_node.node().children;
+      for(let j = 0; j < dom_order.length; j++)
       {
-        let shape = shapes[j]._groups[0][0];
-        let attributes = [];
-        attributes.push(shape.nodeName);
+        if(dom_order[j].nodeName == 'circle') continue;
+        let sel_elem = d3.select(dom_order[j]);
 
-        for(let i = 0; i < shape.attributes.length; i++)
-        {
-          attributes.push(shape.attributes[i].name);
-          attributes.push(shape.attributes[i].value);
-          if(shape.attributes[i].name == 'stroke-width' && shape.attributes[i].value != "0")
-            undo_elems[1].push(shapes[j].attr('id'));
-        }
-        undo_elems[0].push(attributes);
+        for(attr of dom_order[j].attributes)
+          if(attr.name == 'stroke-width' && attr.value != "0")
+            undo_elems[1].push(sel_elem.attr('id'));
+        
+        undo_elems[0].push(dom_order[j].cloneNode(true));
       }
       return undo_elems;
     };
@@ -628,15 +666,31 @@
         redo_history.push(undoElements());
         while(redo_history.length > max_undo_steps) redo_history.shift();
 
-        for(let i = 0; i < shapes.length; i++) shapes[i].remove();
+        main_node.node().innerHTML = '';
         shapes = [];
-
-        for(let i = 0; i < point_elems.length; i++) point_elems[i].remove();
         point_elems = [];
 
         points = revert[2];
         
-        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
+        for(let i = 0; i < revert[0].length; i++)
+        {
+          main_node.node().appendChild(revert[0][i])
+          if(revert[0][i].nodeName == 'g')
+          {
+            let children = getAllChildPolys(revert[0][i]);
+            for(child of children) shapes.push(d3.select(child).attr('stroke-width', 0)
+                                                               .on("contextmenu", contextMenuCalled)
+                                                               .attr('id', ''.concat(id_counter))
+                                                               .on("mouseover", function(){moused_over = this})
+                                                               .on("mouseleave", function(){if(moused_over == this) moused_over = null;}));
+          }
+          else if(revert[0][i].nodeName == 'polygon') shapes.push(d3.select(revert[0][i]).attr('stroke-width', 0)
+                                                            .on("contextmenu", contextMenuCalled)
+                                                            .attr('id', ''.concat(id_counter))
+                                                            .on("mouseover", function(){moused_over = this})
+                                                            .on("mouseleave", function(){if(moused_over == this) moused_over = null;}));
+        };
+
         selected = [];
         
         for(let i = 0; i < points.length; i++)
@@ -652,7 +706,7 @@
 
         for(let i = 0; i < revert[1].length; i++)
           for(let j = 0; j < shapes.length; j++)
-            if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j]._groups[0][0]);
+            if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j].node());
 
         return true;
       }
@@ -668,15 +722,30 @@
         undo_history.push(undoElements());
         while(undo_history.length > max_undo_steps) undo_history.shift();
 
-        for(let i = 0; i < shapes.length; i++) shapes[i].remove();
+        main_node.node().innerHTML = '';
         shapes = [];
-
-        for(let i = 0; i < point_elems.length; i++) point_elems[i].remove();
         point_elems = [];
 
         points = revert[2];
 
-        for(let i = 0; i < revert[0].length; i++) shapes.push(remakeShape(revert[0][i]));
+        for(let i = 0; i < revert[0].length; i++)
+        {
+          main_node.node().appendChild(revert[0][i])
+          if(revert[0][i].nodeName == 'g')
+          {
+            let children = getAllChildPolys(revert[0][i]);
+            for(child of children) shapes.push(d3.select(child).attr('stroke-width', 0)
+                                                               .on("contextmenu", contextMenuCalled)
+                                                               .attr('id', ''.concat(id_counter))
+                                                               .on("mouseover", function(){moused_over = this})
+                                                               .on("mouseleave", function(){if(moused_over == this) moused_over = null;}));
+          }
+          else if(revert[0][i].nodeName == 'polygon') shapes.push(d3.select(revert[0][i]).attr('stroke-width', 0)
+                                                            .on("contextmenu", contextMenuCalled)
+                                                            .attr('id', ''.concat(id_counter))
+                                                            .on("mouseover", function(){moused_over = this})
+                                                            .on("mouseleave", function(){if(moused_over == this) moused_over = null;}));
+        };
         selected = [];
         
         for(let i = 0; i < points.length; i++)
@@ -692,24 +761,45 @@
 
         for(let i = 0; i < revert[1].length; i++)
           for(let j = 0; j < shapes.length; j++)
-            if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j]._groups[0][0]);
+            if(shapes[j].attr('id') == revert[1][i]) selected.push(shapes[j].node());
 
         return true;
       }
       return false;
     };
 
-    //duplicates all selected elements
+    //duplicates element
     function cloneElem(elem)
     {
-      shapes.push(d3.select(elem).clone([true]));
-      shapes[shapes.length-1].attr('stroke-width', 0)
-                             .on("contextmenu", contextMenuCalled)
-                             .attr('id', ''.concat(id_counter))
-                             .on("mouseover", function(){moused_over = this})
-                             .on("mouseleave", function(){if(moused_over == this) moused_over = null;});
-      id_counter++;
-  };
+      if(elem.nodeName == 'polygon')
+      {
+        shapes.push(d3.select(elem).clone(true));
+        shapes[shapes.length-1].attr('stroke-width', 0)
+                               .on("contextmenu", contextMenuCalled)
+                               .attr('id', ''.concat(id_counter))
+                               .on("mouseover", function(){moused_over = this})
+                               .on("mouseleave", function(){if(moused_over == this) moused_over = null;});
+        id_counter++;
+      }
+      else
+      {
+         let join_group = main_node.append('g')
+                              .attr('id', id_counter);
+         let join_elem = join_group.node();
+         id_counter++;
+         let sel_child;
+         for(poly of getAllChildPolys(elem)) join_elem.appendChild(poly.cloneNode(true));
+         for(child of join_elem.children) 
+         {
+          shapes.push(d3.select(child).attr('stroke-width', 0)
+                                      .on("contextmenu", contextMenuCalled)
+                                      .attr('id', ''.concat(id_counter))
+                                      .on("mouseover", function(){moused_over = this})
+                                      .on("mouseleave", function(){if(moused_over == this) moused_over = null;}));
+          id_counter++;
+         }
+       }
+    };
 
   //select/deselect all, called when 'a' is pressed
   function selectAll()
@@ -718,12 +808,16 @@
     //if nothing selected select all
     if(nothingSelected)
     {
-      for(let i = 0; i < shapes.length; i++)
+      let children = main_node.node().children;
+      let polychildren = getAllChildPolys(main_node.node());
+      for(child of children) selected.push(child);
+      for(child of polychildren)
       {
-        if(shapes[i].attr('style') != 'visibility: hidden;')
+        let sel_child = d3.select(child);
+        if(sel_child.attr('style') != 'visibility: hidden;')
         {
-          selected.push(shapes[i]._groups[0][0]);
-          shapes[i].attr('stroke-width', stroke_width)
+          
+          sel_child.attr('stroke-width', stroke_width)
                    .attr('stroke', "gold");
         }
       }
@@ -790,12 +884,26 @@
   };
 
   //remove a selected element
-  function removeElem(elem)
+  function removeElem(element)
   {
-    d3.select(elem).remove();
-    for(let i = 0; i < shapes.length; i++)
+    d3.select(element).remove();
+    if(element.nodeName == 'polygon')
     {
-      if(elem == shapes[i]._groups[0][0]) return shapes.splice(i,1);
+      let elem = element;
+      for(let i = 0; i < shapes.length; i++)
+      {
+        if(elem == shapes[i].node()) return shapes.splice(i,1);
+      }
+    }
+    else
+    {
+      for(elem of getAllChildPolys(element))
+      {
+        for(let i = 0; i < shapes.length; i++)
+        {
+          if(elem == shapes[i].node()) shapes.splice(i,1);
+        }
+      }
     }
     return null;
   }
@@ -827,13 +935,27 @@
     d3.select(elem).attr("points", pt_str);   
   };
 
+  function getAllSelectedPolys()
+  {
+    let allSelectedPolys = [];
+    for(sel of selected)
+    {
+      if(sel.nodeName == 'polygon') allSelectedPolys.push(sel);
+      else allSelectedPolys.push(...getAllChildPolys(sel));
+    }
+    return allSelectedPolys;
+  };
+
   //averages all points of all selected polygons to get the centerpoint of our entire selection
   function getSelectedCenter()
   {
     let xSum = 0;
     let ySum = 0;
     let num_values = 0;
-    for(sel of selected)
+    
+    selectedPolys = getAllSelectedPolys();
+
+    for(sel of selectedPolys)
     {
       pt_list = sel.points;
       for(pt of pt_list)
@@ -857,7 +979,6 @@
     {
       x = (pt_list[j].x-origin[0])*scale[0];
       y = (pt_list[j].y-origin[1])*scale[1];
-      console.log(x,y);
 
       if(j < pt_list.length-1)
       {
@@ -897,15 +1018,21 @@
   {
     if(selected.length == 0) return false;
     let origin = getSelectedCenter();
-    for(sel of selected) applyRotation(sel, degrees, origin);
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys) applyRotation(sel, degrees, origin);
     return true;
   };
 
   //translate selected elements a given [x,y]
   function translateSelected(translation)
   {
+    let toTranslate;
     if(selected.length == 0) return false;
-    for(sel of selected) applyTranslation(sel, translation);
+    for(sel of selected) 
+    { 
+      if(sel.nodeName == 'polygon') applyTranslation(sel, translation);
+      else getAllChildPolys(sel).forEach(poly => applyTranslation(poly, translation));
+    }
     return true;
   };
 
@@ -913,14 +1040,16 @@
   function scaleSelected(scale, origin)
   {
     if(selected.length == 0) return false;
-    for(sel of selected) applyScale(sel,scale,origin);
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys) applyScale(sel,scale,origin);
     return true;
   };
 
   //darkens color of selected polygons
   function darkenSelected()
   {
-    for(sel of selected){
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys){
       d3.select(sel).attr('fill', d3.hsl(d3.select(sel).attr('fill')).darker(edit_sp/40));
     }
     return true;
@@ -931,7 +1060,8 @@
   {
     let sel_elem;
 
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys)
     {
       sel_elem = d3.select(sel);
 
@@ -951,7 +1081,8 @@
   function adjustSaturation(factor, fullsat = false)
   {
     let new_color;
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys)
     {
       sel_elem = d3.select(sel);
       new_color = d3.hsl(sel_elem.attr('fill'));
@@ -965,36 +1096,48 @@
   //changes order of selected polygons in dom so that they are painted on top of unselected polys
   function raiseSelected()
   {
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    let toPush = [];
+    for(let j = 0; j < shapes.length; j++)
     {
-      d3.select(sel).raise();
-      for(let j = 0; j < shapes.length; j++)
+      for(let i = 0; i < selectedPolys.length; i++)
       {
-        if(shapes[j].node().id == sel.id)
+        if(shapes[j].node().id == selectedPolys[i].id)
         {
-          shapes.push(shapes.splice(j,1)[0]);
+          shapes[j].raise();
+          toPush.push(shapes.splice(j,1)[0]);
+          selectedPolys.splice(i,1);
+          j--;
           break;
         }    
       }
-      for(elem of point_elems) elem.raise(); 
     }
+    shapes.push(...toPush);
+    let groups = main_node.selectAll('g')._groups[0];
+    for(let i = 0; i < groups.length; i++) for(sel of selected) if(sel == groups[i]){d3.select(groups[i]).raise(); break;}
+    for(elem of point_elems) elem.raise();
   };
 
   //changes order of selected polygons in dom so that they are painted below unselected polys
   function lowerSelected()
   {
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    let toUnshift = [];
+    for(let j = shapes.length-1; j > -1 ; j--)
     {
-      d3.select(sel).lower();
-      for(let j = 0; j < shapes.length; j++)
+      for(sel of selectedPolys)
       {
         if(shapes[j].node().id == sel.id) 
         {
-          shapes.unshift(shapes.splice(j,1)[0]);
+          shapes[j].lower();
+          toUnshift.unshift(shapes.splice(j,1)[0]);
           break;
-        }      
+        }     
       } 
     }
+    shapes.unshift(...toUnshift); 
+    let groups = main_node.selectAll('g')._groups[0];
+    for(let i = groups.length; i > -1; i--) for(sel of selected) if(sel == groups[i]){d3.select(groups[i]).lower(); break;}
   };
 
   //makes selected elements invisible and uninteractable until unhidden, if nothing selected unhides all hidden
@@ -1002,7 +1145,8 @@
   {
     if(selected.length)
     {
-      for(sel of selected)
+      let selectedPolys = getAllSelectedPolys();
+      for(sel of selectedPolys)
       {
         d3.select(sel).attr('stroke-width', 0);
         sel.style = 'visibility: hidden;';
@@ -1035,7 +1179,8 @@
   function lowerOpacity()
   {
     let sel_elem;
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys)
     {
       sel_elem = d3.select(sel);
       if(sel_elem.attr('opacity') == null) sel_elem.attr('opacity', 1-(edit_sp/40));
@@ -1047,7 +1192,8 @@
   function raiseOpacity()
   {
     let sel_elem;
-    for(sel of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys)
     {
       sel_elem = d3.select(sel);
       if(sel_elem.attr('opacity') == null || sel_elem.attr('opacity') > 1) sel_elem.attr('opacity',1);
@@ -1059,11 +1205,11 @@
   function hueShiftRight()
   {
     let new_color;
-    for(let i = 0; i < selected.length; i++)
+    let selectedPolys = getAllSelectedPolys();
+    for(sel of selectedPolys)
     {
-      sel_elem = d3.select(selected[i]);
+      sel_elem = d3.select(sel);
       new_color = d3.hsl(sel_elem.attr('fill'));
-      //console.log(new_color);
       if(sel_elem.attr('fill') == 'black') new_color = 'rgb(20,0,0)';
       else if(sel_elem.attr('fill') == 'white') new_color = 'rgb(230,255,255)';
       else if(isNaN(new_color.h))
@@ -1112,7 +1258,8 @@
   {
     let sel;
     let animId;
-    for(elem of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(elem of selectedPolys)
     {
       sel = d3.select(elem);
       animHueElem(sel);
@@ -1151,7 +1298,8 @@
   {
     let sel;
     let animId;
-    for(elem of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(elem of selectedPolys)
     {
       sel = d3.select(elem);
       animFlashElem(sel);
@@ -1191,7 +1339,8 @@
     let sel;
     let animId;
     let origin = getSelectedCenter();
-    for(elem of selected)
+    let selectedPolys = getAllSelectedPolys();
+    for(elem of selectedPolys)
     {
       sel = d3.select(elem);
       animRotateElem(sel, origin);
@@ -1204,7 +1353,8 @@
     if(moused_over != null)
     {
       let sel_elem;
-      for(sel of selected)
+      let selectedPolys = getAllSelectedPolys();
+      for(sel of selectedPolys)
       {
         sel_elem = d3.select(sel);
         sel_elem.attr('fill', d3.select(moused_over).attr('fill'));
@@ -1218,6 +1368,48 @@
       let new_color = "rgb(".concat(data[0],",",data[1],',',data[2],")");
       for(sel of selected) d3.select(sel).attr('fill', new_color);
     }
+  };
+
+  function joinSelected()
+  {
+    let join_group = main_node.append('g')
+                              .attr('id', id_counter);
+    let join_elem = join_group.node();
+    id_counter++;
+    //this is awful but its to avoid messing up layering
+    let index;
+    let dom_order = main_node.node().children;
+    while(selected.length){
+      for(let i = 0; i < dom_order.length; i++) 
+      {
+        index = selected.indexOf(dom_order[i]);
+        //its weird but dom order actually is changing every time we call remove
+        if(index != -1)
+        { 
+          join_elem.appendChild(d3.select(selected.splice(index,1)[0]).remove().node());
+          i--;
+        }
+      }
+    }
+    selected.push(join_elem);
+    return join_group;
+  };
+
+  function unjoinSelected()
+  {
+    let toPush = [];
+    let before, children;
+    for(let i = 0; i < selected.length; i++)
+    {
+      if(selected[i].nodeName == 'g')
+      {
+        before = selected[i].nextElementSibling;
+        children = selected[i].children;
+        while(children.length) toPush.push(main_node.node().insertBefore(children[0], before));
+        d3.select(selected.splice(i,1)[0]).remove();
+      }
+    }
+    selected.push(...toPush);
   };
 
   //called whenever any key is pressed
@@ -1387,6 +1579,10 @@
     else if(e.keyCode == 67) copyColor();
     //hides selected elements if there are any, otherwise unhides all hidden
     else if(e.keyCode == 73) hideSelected();
+    //join selected elements on 'j'
+    else if(e.keyCode == 74) joinSelected();
+    //unjoin selected elements on 'k'
+    else if(e.keyCode == 75) unjoinSelected();
   };
   </script>
 
