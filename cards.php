@@ -23,11 +23,11 @@
 </head>
 <body>
   <div class="nav">
-      <a href="index.html">Home</a>
-      <a class="active" href="cards.html">Guessing Game</a>
-      <a href="GUI-tar.html">GUI-tar</a>
-      <a href="polyform.html">PolyForm</a>
-      <a href="featured.html">Featured Arts</a>
+      <a href="index.php">Home</a>
+      <a class="active" href="cards.php">Guessing Game</a>
+      <a href="GUI-tar.php">GUI-tar</a>
+      <a href="polyform.php">PolyForm</a>
+      <a href="featured.php">Featured Arts</a>
   </div>
   <br>
   <section class="title-container">

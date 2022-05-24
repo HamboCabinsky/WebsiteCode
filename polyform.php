@@ -14,11 +14,11 @@
   </head>
   <body>
       <div class="nav">
-      <a href="index.html">Home</a>
-      <a href="cards.html">Guessing Game</a>
-      <a href="GUI-tar.html">GUI-tar</a>
-      <a href="polyform.html" class="active">PolyForm</a>
-      <a href="featured.html">Featured Arts</a>
+      <a href="index.php">Home</a>
+      <a href="cards.php">Guessing Game</a>
+      <a href="GUI-tar.php">GUI-tar</a>
+      <a href="polyform.php" class="active">PolyForm</a>
+      <a href="featured.php">Featured Arts</a>
       </div>
       <br>
       <section class="title-container">
