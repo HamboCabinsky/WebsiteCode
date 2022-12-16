@@ -17,8 +17,8 @@
       <a href="polyform.php">PolyForm</a>
       <a href="featured.php">Featured Arts</a>
       
-      <a href='register.php' style="position: absolute; right: 400px;">Register</a>
       <div id='profile' style="float: right; text-align: right; padding: 10px;">
+        <a href='register.php' style="position: absolute; right: 400px; padding: 0px;">Register</a>
         <form action = "php/authenticate.php" method="post">
           <input type="text" name="username" placeholder="Username" id="username" required>
           <input type="password" name="password" placeholder="Password" id="password" required>
@@ -65,7 +65,7 @@
   </body>
   <script>
     if('' + '<?=$_SESSION["user"] ?>'){
-      document.getElementById('profile').innerHTML = "Logged in as " + '<?=$_SESSION["user"]?>' + ' <form action="php/logout.php" method="post"> <input type="submit" value="Logout"> </form>';
+      document.getElementById('profile').innerHTML = '<form action="php/logout.php" method="post"> Logged in as ' + '<?=$_SESSION["user"]?>' + ' <input type="submit" value="Logout"> </form>';
       console.log('<?=$_SESSION["user"] ?>');
     }
   </script>

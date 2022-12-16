@@ -28,6 +28,15 @@
       <a href="GUI-tar.php">GUI-tar</a>
       <a href="polyform.php">PolyForm</a>
       <a href="featured.php">Featured Arts</a>
+      
+      <div id='profile' style="float: right; text-align: right; padding: 10px;">
+        <a href='register.php' style="position: absolute; right: 400px; padding: 0px;">Register</a>
+        <form action = "php/authenticate.php" method="post">
+          <input type="text" name="username" placeholder="Username" id="username" required>
+          <input type="password" name="password" placeholder="Password" id="password" required>
+          <input type="submit" value="Login">
+        </form>
+      </div>
   </div>
   <br>
   <section class="title-container">
@@ -528,6 +537,13 @@
       }
     };
 
+</script>
+
+<script>
+    if('' + '<?=$_SESSION["user"] ?>'){
+      document.getElementById('profile').innerHTML = '<form action="php/logout.php" method="post"> Logged in as ' + '<?=$_SESSION["user"]?>' + ' <input type="submit" value="Logout"> </form>';
+      console.log('<?=$_SESSION["user"] ?>');
+    }
 </script>
 <br>
 <br>
